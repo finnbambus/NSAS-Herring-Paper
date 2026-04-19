@@ -1,0 +1,313 @@
+---
+title: "data cleanup"
+author: "finn krauss"
+date: "2025-05-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = normalizePath(".."))
+```
+
+# Load packages
+
+```{r}
+setwd("~/R Studio/NSAS Herring/NSAS-Herring")
+
+library(dplyr)
+library(tidyverse)
+library(ncdf4)
+library(raster)
+library(ggplot2)
+library(reshape2)
+library(sf)
+library(readr)
+library(patchwork)
+```
+
+# Load and clean files
+
+## LAI data import
+
+```{r}
+## Read LAI .txt data, rename its columns & convert from century break to full year
+LAI_full <- read.table("data raw/NSAS LAI.txt", header = TRUE, strip.white = TRUE) %>%
+  rename(component = Area, 
+         year = Year, 
+         LAI_unit = LAIUnit, 
+         fortnight = Fortnight, 
+         LAI_9mm = L..9) %>%
+  mutate(year = ifelse(year >= 100, 2000 + (year - 100),1900 + year),
+         component = case_when(component == "Or/Sh" ~ "Shetland_Orkney", 
+                               component == "CNS" ~ "Banks",
+                               component == "SNS" ~ "Downs", 
+                               TRUE ~ component),
+         component = as.factor(component),
+         LAI_unit = as.factor(LAI_unit),
+         fortnight = as.factor(fortnight))
+
+## Read LAI_components .csv, convert it into longformat & rename columns for continuity
+LAI_component <- read_csv("data raw/NSAS LAI Components 2025.csv") %>%
+  pivot_longer(cols = -c(1), names_to = "year", values_to = "LAI_perc.") %>%
+  rename(component = ...1) %>%
+  mutate(component = case_when(component == "LAI-ORSH" ~ "Shetland_Orkney",
+                               component == "LAI-BUN" ~ "Buchan",
+                               component == "LAI-CNS" ~ "Banks",
+                               component == "LAI-SNS" ~ "Downs"),
+         component = as.factor(component),
+         year = as.numeric(year),
+         LAI_perc. = LAI_perc. * 100)
+
+## Read SSB_2025 .csv & and rename columns for continuity
+Herring_full <- read_csv("data raw/NSAS SSB 2025.csv") %>%
+  dplyr::select(-1) %>%
+  rename(SSB = value, cv = CV, l_bnd = lbnd, u_bnd = ubnd)  
+
+### *(SSB = SSB in Tonnes, cv = coefficient of variation, l_bnd = lower limit of 95% CI & u_bnd = upper limit of 95% CI)
+
+## read ICES data & fill to lenght
+ICES_data <- read.csv("data raw/NSAS ICES data 2024.txt", fill = TRUE)
+ICES_data[nrow(ICES_data) + 1, ] <- NA
+
+### Add F & R from to Herring_full
+Herring_full$F <- ICES_data$F
+Herring_full$F_high <- ICES_data$F_high
+Herring_full$F_low <- ICES_data$F_low
+Herring_full$Recruitment <- ICES_data$Recruitment
+Herring_full$Recruitment_high <- ICES_data$recruitment_high
+Herring_full$Recruitment_low <- ICES_data$recruitment_low
+  
+
+## Split SSB Data by components & 95% bounds by component percentage and attach it and LAI percent data to SSB
+Herring_LAI <- Herring_full %>%
+  left_join(LAI_component, by = "year") %>%
+  mutate(SSB_component = SSB * (LAI_perc. / 100),
+         l_bnd_component = l_bnd * (LAI_perc. / 100),
+         u_bnd_component = u_bnd * (LAI_perc. / 100),
+         Recruitment = as.integer(Recruitment * (LAI_perc. / 100)),
+         Recruitment_high = as.integer(Recruitment_high * (LAI_perc. / 100)),
+         Recruitment_low = as.integer(Recruitment_low * (LAI_perc. / 100))) %>%
+  dplyr::select(year, component, LAI_perc., SSB_component, l_bnd_component, u_bnd_component, F, F_high, F_low, Recruitment, Recruitment_high, Recruitment_low) %>%
+  drop_na()
+
+```
+
+## Environmental data import
+
+```{r}
+### Load functions from "functions.R"
+source("R/functions.R")
+
+### Call "load_enironment_data" from functions and store in environment
+env_data_full <- load_environmental_data(
+  sst_file = "data raw/NS SST Monthly.nc", 
+  sss_file = "data raw/NS SSS Monthly.nc")
+
+### Call process_env_data and save as data frame for full stock
+#### Full Stock
+env_df_full <- process_env_data_seasonal(env_data_full, include_sbt = FALSE)
+
+#### Components
+env_df_subset <- process_env_data_seasonal(env_data_full, 
+                                           shapefile_path = "data raw/components_shp/components.shp", 
+                                           polygon_id_column = "component",
+                                           include_sbt = FALSE)
+
+### Clear large data
+env_data_full <- NULL
+```
+
+## CPR data import
+
+```{r}
+### Read data to environment
+cpr_small <- read.csv("data raw/NS CPR/CPR_RegimeShift_Data_SmallZooplankton_10062025.csv")
+cpr_phyto <- read.csv("data raw/NS CPR/CPR_RegimeShift_Data_Phytoplankton_10062025.csv")
+
+### Call "Process_food_availability" from functions and save as df in lists
+#### Full Stock
+cpr_full <- list()
+cpr_full$phyto <- process_food_availability(cpr_phyto)
+cpr_full$small <- process_food_availability(cpr_small, selected_species_ids = c(1, 4, 5, 10742, 1628))
+
+#### Components
+cpr_component <- list()
+cpr_component$phyto <- process_food_availability(cpr_phyto, shapefile_path = "data raw/components_shp/components.shp", "component")
+cpr_component$small <- process_food_availability(cpr_small, selected_species_ids = c(1, 4, 5, 10742, 1628) , shapefile_path = "data raw/components_shp/components.shp", polygon_id_column = "component")
+
+### Clear large data
+cpr_small <- NULL
+cpr_phyto <- NULL
+
+### Call "test_data_quality" from functions
+test_data_quality(cpr_full$phyto)       # Both metrics usable
+test_data_quality(cpr_full$small)       # Both metrics usable
+test_data_quality(cpr_component$phyto)  # Both metrics usable
+test_data_quality(cpr_component$small)  # Both metrics usable
+```
+
+# Visual investigation
+
+## LAI visualization
+
+```{r}
+Herring_LAI$component <- factor(Herring_LAI$component, levels = c("Shetland_Orkney", "Buchan", "Banks", "Downs"))
+LAI_component$component <- factor(LAI_component$component, levels = c("Shetland_Orkney", "Buchan", "Banks", "Downs"))
+
+## Plot timeseries of LAI by component
+### Add LAI by year
+LAI_aggregated <- LAI_full %>%
+  group_by(year, component) %>%
+  summarise(LAI_9mm_sum = sum(LAI_9mm),
+    .groups = 'drop') %>%
+  mutate(component = factor(component, levels = c("Shetland_Orkney", "Buchan", "Banks", "Downs")))
+  
+### Plot aggregated LAI
+plot_LAI_byyear <- ggplot(LAI_aggregated, aes(x = year, 
+                    y = LAI_9mm_sum, 
+                    color = component,
+                    shape = component)) +
+  geom_point(size = 1.5, alpha = 0.8) +
+  geom_line(linewidth = 0.8, alpha = 0.8) +
+  scale_color_viridis_d(option = "mako", begin = 0.1, end = 0.8) +
+  scale_shape_manual(values = c("Shetland_Orkney" = 16, "Buchan" = 17, "Banks" = 15, "Downs" = 18)) +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(title = NULL, 
+       x = "Year", 
+       y = "LAI",
+       color = "Component",
+       shape = "Component") +
+  guides(color = guide_legend(), shape = guide_legend()) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10)))
+plot_LAI_byyear
+
+## Plot stacked bar chart for components percentage of LAI
+plot_LAI_percent <- ggplot(LAI_component, aes(x = as.factor(year), 
+                              y = LAI_perc., fill = component)) +
+  geom_bar(stat = "identity", position = "stack") + # Create stacked bars
+  scale_fill_viridis_d(option = "mako", begin = 0.1, end = 0.8) +  # Use mako palette with capped range
+  scale_x_discrete(breaks = function(x) x[seq(1, length(x), by = 2)]) +  # Show every second year
+  labs(title = NULL,
+       x = "Year",
+       y = "LAI Percentage (%)",
+       fill = "Component") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10)))
+plot_LAI_percent
+
+### SSB component overlay
+plot_SSB_component <- ggplot(Herring_LAI, aes(x = year, y = SSB_component / 1e6, color = component, fill = component)) +
+  geom_ribbon(aes(ymin = l_bnd_component / 1e6,
+                  ymax = u_bnd_component / 1e6), alpha = 0.3, color = NA) +
+  geom_line(linewidth = 0.8) +
+  scale_color_viridis_d(option = "mako", begin = 0.1, end = 0.8) +
+  scale_fill_viridis_d(option = "mako", begin = 0.1, end = 0.8) +
+  labs(title = NULL,
+       x = "Year",
+       y = "SSB in million t") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10)))
+plot_SSB_component
+
+### R component overlay
+plot_R_component <- ggplot(Herring_LAI, aes(x = year, y = Recruitment / 1e6, color = component, fill = component)) +
+  geom_line(linewidth = 0.8) +
+  scale_color_viridis_d(option = "mako", begin = 0.1, end = 0.8) +
+  scale_fill_viridis_d(option = "mako", begin = 0.1, end = 0.8) +
+  labs(title = NULL,
+       x = "Year",
+       y = "R in billions") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_text(margin = margin(t = 10)),
+        axis.title.y = element_text(margin = margin(r = 10)))
+plot_R_component
+```
+
+## Environmental CPR visualization
+
+```{r}
+threshold_values <- list(
+  "Banks" = 12.1)
+
+### As factor for intendet component order
+env_df_subset$Region <- factor(env_df_subset$Region, 
+                              levels = c("Shetland_Orkney", "Buchan", "Banks", "Downs"))
+### Call "plot_env_data"
+plot_env_grid <- plot_env_data_dual(env_df_full, env_df_subset,
+                                    cpr_full_data = cpr_full, 
+                                    cpr_component_data = cpr_component,
+                                    threshold_values = threshold_values)
+
+print(plot_env_grid)
+```
+
+# Save data and plots
+
+## Save rdata
+
+```{r}
+### LAI data
+save(LAI_full, file = file.path("data/", "LAI_full.Rdata"))
+save(LAI_aggregated, file = file.path("data/", "LAI_aggregated.Rdata"))
+save(Herring_full, file = file.path("data/", "Herring_full.Rdata"))
+save(Herring_LAI, file = file.path("data/", "Herring_LAI.Rdata"))
+
+### Environmental data
+save(env_data_full, file = file.path("data/", "env_data_full.Rdata"))
+save(env_df_full, file = file.path("data/", "env_df_full.Rdata"))
+save(env_df_subset, file = file.path("data/", "env_df_subset.Rdata"))
+
+#### CPR data
+save(cpr_full, file = file.path("data/", "cpr_full.Rdata"))
+save(cpr_component, file = file.path("data/", "cpr_component.Rdata"))
+```
+
+## Save plots
+
+```{r}
+### LAI plots
+ggsave(filename = file.path("plots/", "LAI_by_year.png"),
+       plot = plot_LAI_byyear,
+       bg = "white",
+       width = 7,
+       height = 5,
+       dpi = 300)
+
+ggsave(filename = file.path("plots/", "LAI_percent.png"),
+       plot = plot_LAI_percent,
+       bg = "white",
+       width = 7,
+       height = 5,
+       dpi = 300)
+
+ggsave(filename = file.path("plots/", "SSB_component.png"),
+       plot = plot_SSB_component,
+       bg = "white",
+       width = 7,
+       height = 5,
+       dpi = 300)
+
+ggsave(filename = file.path("plots/", "R_component.png"),
+       plot = plot_R_component,
+       bg = "white",
+       width = 7,
+       height = 5,
+       dpi = 300)
+
+### Env. plot
+ggsave(filename = file.path("plots/", "env_grid.png"),
+       plot = plot_env_grid,
+       bg = "white",
+       width = 15,
+       height = 10,
+       dpi = 300)
+```
