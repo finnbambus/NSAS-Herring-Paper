@@ -4,35 +4,33 @@
 // ════════════════════════════════════════════════════════════════════
 
 #import "lib/rho.typ": *
+#import "@preview/wordometer:0.1.5": word-count, total-words, total-characters
+#show: word-count
 
 // ── Modular switches ─────────────────────────────────────────────────
 #let show-cover-page  = true   // set false for manuscript / paper
 #let show-abstract    = true   // set false for quick drafts
 #let show-outline     = true   // set false for manuscript / paper
-#let two-columns      = true   // set false for thesis / word export
-#let show-header-footer = true // set false to disable header and footer
+#let two-columns      = false   // set false for thesis / word export
+#let show-header-footer = false // set false to disable header and footer
 
 // ── Document metadata ────────────────────────────────────────────────
 #let meta = (
   title:           "Regime-shift dynamics of the North Sea Autumn Spawning Herring (Clupea harengus) and its manifestation in individual spawning components.",
   author:          "Finn Linus Krauss",
   birthday:        "April 10, 2001",
-  student-id:      "7468125",
-  degree:          "Master of Science",
-  major:           "Marine Biological Resources",
+  student_id:      "7468125",
+  degree:          "Bachelor of Science",
+  major:           "Marine Ecosystems and Fisheries Sciences",
   department:      "Department of Biology",
   faculty:         "Institute of Marine Ecosystem and Fishery Science (IMF)",
   university:      "Universität Hamburg",
   location:        "Hamburg, Germany",
   date:            "April 2026",
-  submission-text: "Thesis submitted in partial fulfillment of the requirements for the degree of",
   supervisor:      "Dr. Alexandra Blöcker",
-  co-supervisor:   "Prof. Dr. Christian Möllmann",
   logo:            none,   // e.g. "figures/university-hamburg.png"
   // Article-header fields
-  supervisors:     "Dr. Alexandra Blöcker, Prof. Dr. Christian Möllmann",
-  email:           "alexandra.bloecker@uni-hamburg.de",
-  submitted:       "April 2026",
+  email:           "finn.linus.krauss@imbrsea.eu",
   defended:        none,
   accepted:        none,
   published:       none,
@@ -57,24 +55,9 @@
 // ════════════════════════════════════════════════════════════════════
 // COVER PAGE  (remove by setting show-cover-page = false above)
 // ════════════════════════════════════════════════════════════════════
+
 #if show-cover-page {
-  show-cover(
-    title:           meta.title,
-    author:          meta.author,
-    birthday:        meta.birthday,
-    student-id:      meta.student-id,
-    degree:          meta.degree,
-    major:           meta.major,
-    department:      meta.department,
-    faculty:         meta.faculty,
-    university:      meta.university,
-    location:        meta.location,
-    date:            meta.date,
-    submission-text: meta.submission-text,
-    supervisor:      meta.supervisor,
-    co-supervisor:   meta.co-supervisor,
-    logo:            meta.logo,
-  )
+  show-cover(meta)
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -93,14 +76,11 @@
 // ── First-page title block ────────────────────────────────────────────
 #show-article-header(
   title:       meta.title,
-  authors:     ((name: meta.author, affil: "1"),),
-  date:        [This manuscript was compiled on #datetime.today().display("[month repr:long] [day], [year]")],
+  date:        [This manuscript compiled on #datetime.today().display("[month repr:long] [day], [year]")],
   abstract:    if show-abstract { my-abstract } else { none },
   keywords:    if show-abstract { my-keywords  } else { none },
-  show-info:   true,
-  supervisors: meta.supervisors,
+  show-info:   false,
   email:       meta.email,
-  submitted:   meta.submitted,
   defended:    meta.defended,
   accepted:    meta.accepted,
   published:   meta.published,
@@ -123,16 +103,13 @@
 
 = Introduction
 
-#dropcap("T", [he North Sea presents a highly productive and dynamic ecosystem with a
-rich history of fisheries having key economic and cultural impacts. Replace this placeholder
-text with your actual introduction.])
+The North Sea presents a highly productive and dynamic ecosystem with a
+rich history of fisheries having key economic and cultural impacts. Replace this placeholder text with your actual introduction.
 
 The four recognized spawning components of NSAS herring are shown in @fig:component_map.
 
 #figure(
-  // Uncomment and adjust path when you have the figure:
-  // image("figures/component_map.png", width: 100%),
-  rect(width: 100%, height: 5cm, fill: rgb(230,238,245), stroke: none),  // placeholder
+  image("../plots/component_map.png", width: 50%),
   caption: [Map of the North Sea with recognized NSAS herring spawning components
     (Shetland-Orkney, Buchan, Banks, and Downs).],
 ) <fig:component_map>
