@@ -39,10 +39,12 @@
   doi:             none,
   license:         "Unrestricted use, distribution, and reproduction is permitted in any medium, provided the original author and source are credited.",
 )
+
 // ── Abbrevations ─────────────────────────────────────────────────────
 #abbr.make(
   ("NSAS", "North Sea Autumn Spawning"),
 )
+
 // ── Abstract content ─────────────────────────────────────────────────
 #let my-abstract = [
   The @NSAS herring (_Clupea harengus_) has experienced multiple regime shifts throughout its history, but the spatial manifestation of these transitions across individual spawning components remains poorly understood.
