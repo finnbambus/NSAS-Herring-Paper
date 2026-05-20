@@ -5,7 +5,9 @@
 
 #import "lib/rho.typ": *
 #import "@preview/wordometer:0.1.5": word-count, total-words, total-characters
+#import "@preview/abbr:0.3.0"
 #show: word-count
+#show: abbr.show-rule
 
 // ── Modular switches ─────────────────────────────────────────────────
 #let show-cover-page  = true   // set false for manuscript / paper
@@ -37,17 +39,15 @@
   doi:             none,
   license:         "Unrestricted use, distribution, and reproduction is permitted in any medium, provided the original author and source are credited.",
 )
-
+// ── Abbrevations ─────────────────────────────────────────────────────
+#abbr.make(
+  ("NSAS", "North Sea Autumn Spawning"),
+)
 // ── Abstract content ─────────────────────────────────────────────────
 #let my-abstract = [
-  The North Sea Autumn Spawning (NSAS) herring (_Clupea harengus_) has experienced
-  multiple regime shifts throughout its history, but the spatial manifestation of these
-  transitions across individual spawning components remains poorly understood.
+  The @NSAS herring (_Clupea harengus_) has experienced multiple regime shifts throughout its history, but the spatial manifestation of these transitions across individual spawning components remains poorly understood.
 
-  This study investigated regime shift dynamics in the NSAS herring stock and its four
-  spawning components (Shetland-Orkney, Buchan, Banks, and Downs) using a comprehensive
-  analytical framework examining abrupt shifts in biomass, hysteresis in response to
-  fishing pressure, and non-stationary stock-recruitment relationships.
+  This study investigated regime shift dynamics in the NSAS herring stock and its four spawning components (Shetland-Orkney, Buchan, Banks, and Downs) using a comprehensive analytical framework examining abrupt shifts in biomass, hysteresis in response to fishing pressure, and non-stationary stock-recruitment relationships.
 ]
 
 #let my-keywords = "regime shifts, North Sea herring, spawning components, stock-recruitment relationships, spatial heterogeneity"
@@ -89,11 +89,58 @@
 )
 
 // ── Table of contents (remove by setting show-outline = false above) ──
+
+#set heading(numbering: "1.1")
+
+#show outline.entry.where(level: 1): it => [
+  #link(
+    it.element.location(),
+    it.indented(
+      strong(text(fill: black)[#it.prefix()]),
+      [
+        #strong(text(fill: accent)[#it.body()])
+        #h(1fr)
+        #sym.wj
+        #strong(text(fill: black)[#it.page()])
+      ],
+    ),
+  )
+]
+
+#show outline.entry.where(level: 2): it => [
+  #link(
+    it.element.location(),
+    it.indented(
+      text(fill: black)[#it.prefix()],
+      [
+        #text(fill: accent)[#it.body()]
+        #box(width: 1fr, it.fill)
+        #sym.wj
+        #text(fill: black)[#it.page()]
+      ],
+    ),
+  )
+]
+
+#show outline.entry.where(level: 3): it => [
+  #link(
+    it.element.location(),
+    it.indented(
+      [],
+      [
+        #box(width: 100%)[
+          #text(size: 7pt, fill: accent, hyphenate: false)[#it.body()]
+        ]
+      ],
+    ),
+  )
+]
+
 #if show-outline {
   show outline: set outline(title: none)
   text(font: font-sans, weight: "bold", fill: accent, size: 11pt)[Contents]
   v(0.4em)
-  outline(depth: 3, indent: 1.5em)
+  outline(depth: 3, indent: auto)
   colbreak()
 }
 
@@ -109,7 +156,7 @@ rich history of fisheries having key economic and cultural impacts. Replace this
 The four recognized spawning components of NSAS herring are shown in @fig:component_map.
 
 #figure(
-  image("../plots/component_map.png", width: 50%),
+  image("../plots/component_map.png", width: 100%),
   caption: [Map of the North Sea with recognized NSAS herring spawning components
     (Shetland-Orkney, Buchan, Banks, and Downs).],
 ) <fig:component_map>
@@ -164,6 +211,7 @@ The four recognized spawning components of NSAS herring are shown in @fig:compon
 )
 #counter(figure).update(0)
 #counter(table).update(0)
+#set heading(numbering: none)
 
 = Appendix <appendix>
 
