@@ -1,5 +1,5 @@
 {
   "$schema": "vscode://schemas/settings/workspace",
   "tinymist.entryPath": "./main.typ",
-  "tinymist.exportPdf": "onSave"
+  "tinymist.exportPdf": "never"
 }
