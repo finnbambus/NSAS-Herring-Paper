@@ -7,6 +7,6 @@
 #let text-faint = rgb(140, 140, 140)
 
 // Font stacks: all names must be strings in Typst.
-#let font-sans  = ("Arial")
+#let font-sans  = ("Helvetica")
 #let font-serif = ("Times New Roman")
-#let font-mono  = ("Courier New")
+#let font-mono  = ("Courier")
