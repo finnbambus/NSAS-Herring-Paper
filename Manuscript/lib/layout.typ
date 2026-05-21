@@ -48,7 +48,16 @@
   set heading(numbering: "1")
 
   show heading.where(level: 1): it => {
-    v(1.2em, weak: true)
+  v(1.2em, weak: true)
+  if it.numbering == none {
+    text(
+      fill: accent,
+      weight: "bold",
+      size: 11pt,
+      font: font-sans,
+      it.body,
+    )
+  } else {
     text(
       fill: accent,
       weight: "bold",
@@ -56,22 +65,41 @@
       font: font-sans,
       counter(heading).display("1") + ". " + it.body,
     )
-    v(0.4em, weak: true)
   }
+  v(0.4em, weak: true)
+}
 
-  show heading.where(level: 2): it => {
-    v(0.8em, weak: true)
+show heading.where(level: 2): it => {
+  v(0.8em, weak: true)
+  if it.numbering == none {
+    text(
+      weight: "bold",
+      size: 10pt,
+      font: font-sans,
+      it.body,
+    )
+  } else {
     text(
       weight: "bold",
       size: 10pt,
       font: font-sans,
       counter(heading).display("1.1") + ". " + it.body,
     )
-    v(0.3em, weak: true)
   }
+  v(0.3em, weak: true)
+}
 
-  show heading.where(level: 3): it => {
-    v(0.6em, weak: true)
+show heading.where(level: 3): it => {
+  v(0.6em, weak: true)
+  if it.numbering == none {
+    text(
+      weight: "bold",
+      style: "italic",
+      size: 9.5pt,
+      font: font-sans,
+      it.body,
+    )
+  } else {
     text(
       weight: "bold",
       style: "italic",
@@ -79,8 +107,9 @@
       font: font-sans,
       counter(heading).display("1.1.1") + ". " + it.body,
     )
-    v(0.2em, weak: true)
   }
+  v(0.2em, weak: true)
+}
 
   show outline: it => {
     set text(font: font-sans, fill: accent, size: 9pt)

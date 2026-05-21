@@ -1,12 +1,7 @@
-// ════════════════════════════════════════════════════════════════════
-// RHO TYPST TEMPLATE  –  main.typ
-// Toggle the three booleans below to switch between use cases.
-// ════════════════════════════════════════════════════════════════════
-
 #import "lib/rho.typ": *
 #import "@preview/wordometer:0.1.5": word-count, total-words, total-characters
-#import "@preview/abbr:0.3.0"
 #show: word-count
+#import "@preview/abbr:0.3.0"
 #show: abbr.show-rule
 
 // ── Modular switches ─────────────────────────────────────────────────
@@ -14,7 +9,7 @@
 #let show-abstract    = true   // set false for quick drafts
 #let show-outline     = true   // set false for manuscript / paper
 #let two-columns      = false   // set false for thesis / word export
-#let show-header-footer = false // set false to disable header and footer
+#let show-header-footer = true // set false to disable header and footer
 
 // ── Document metadata ────────────────────────────────────────────────
 #let meta = (
@@ -76,6 +71,8 @@
 )
 
 // ── First-page title block ────────────────────────────────────────────
+#counter(page).update(1)
+
 #show-article-header(
   title:       meta.title,
   date:        [This manuscript compiled on #datetime.today().display("[month repr:long] [day], [year]")],
@@ -99,55 +96,36 @@
     it.element.location(),
     it.indented(
       strong(text(fill: black)[#it.prefix()]),
-      [
-        #strong(text(fill: accent)[#it.body()])
+      [#strong(text(fill: accent)[#it.body()])
         #h(1fr)
         #sym.wj
-        #strong(text(fill: black)[#it.page()])
-      ],
-    ),
-  )
-]
+        #strong(text(fill: black)[#it.page()])],),)]
 
 #show outline.entry.where(level: 2): it => [
-  #link(
-    it.element.location(),
+  #link(it.element.location(),
     it.indented(
       text(fill: black)[#it.prefix()],
-      [
-        #text(fill: accent)[#it.body()]
+      [#text(fill: accent)[#it.body()]
         #box(width: 1fr, it.fill)
         #sym.wj
-        #text(fill: black)[#it.page()]
-      ],
-    ),
-  )
-]
+        #text(fill: black)[#it.page()]],),)]
 
 #show outline.entry.where(level: 3): it => [
   #link(
     it.element.location(),
     it.indented(
-      [],
-      [
-        #box(width: 100%)[
-          #text(size: 7pt, fill: accent, hyphenate: false)[#it.body()]
-        ]
-      ],
-    ),
-  )
-]
+      [],[#box(width: 100%)[
+          #text(size: 7pt, fill: accent, hyphenate: false)[#it.body()]]],),)]
 
 #if show-outline {
   show outline: set outline(title: none)
   text(font: font-sans, weight: "bold", fill: accent, size: 11pt)[Contents]
   v(0.4em)
   outline(depth: 3, indent: auto)
-  colbreak()
-}
+  colbreak()}
 
 // ════════════════════════════════════════════════════════════════════
-// CONTENT  –  write your thesis/paper below this line
+// CONTENT  –  write thesis/paper below this line
 // ════════════════════════════════════════════════════════════════════
 
 = Introduction
@@ -206,18 +184,10 @@ The four recognized spawning components of NSAS herring are shown in @fig:compon
 
 // ── Appendix ──────────────────────────────────────────────────────────
 #colbreak()
-
-// Reset counters and switch to S-prefixed numbering for supplement
 #set figure(
-  numbering: n => "S" + str(n),
-)
+  numbering: n => "S" + str(n),)
 #counter(figure).update(0)
 #counter(table).update(0)
 #set heading(numbering: none)
 
-= Appendix <appendix>
-
-== Supplementary Information
-
-Supplementary figures and tables go here.
-
+= Appendix
