@@ -10,18 +10,20 @@ knitr::opts_knit$set(root.dir = normalizePath(".."))
 ```
 
 ## Load Packages
-```{r}
-setwd("~/R Studio/NSAS Herring/NSAS-Herring")
 
-# Load required libraries
-library(sf)
-library(ggplot2)
-library(dplyr)
-library(elevatr)
-library(rnaturalearth)
-library(ggnewscale)
-library(grid)
+```{r}
+# installs packages if not already installed
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
+
+pacman::p_load(sf, ggplot2, dplyr, elevatr, rnaturalearth, ggnewscale, grid)
+
+# setwd to project directory
+this_file <- rstudioapi::getSourceEditorContext()$path
+ setwd(dirname(this_file))
+ setwd("..")
 ```
+
+## Load Data & Build Map
 
 ```{r}
 # Load shapefile

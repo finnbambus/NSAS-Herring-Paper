@@ -9,21 +9,21 @@ output: html_document
 knitr::opts_knit$set(root.dir = normalizePath(".."))
 ```
 
+
 # Load packages
 
 ```{r}
-setwd("~/R Studio/NSAS Herring/NSAS-Herring")
+# installs packages if not already installed
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-library(dplyr)
-library(tidyverse)
-library(ncdf4)
-library(raster)
-library(ggplot2)
-library(reshape2)
-library(sf)
-library(readr)
-library(patchwork)
+pacman::p_load(dyplr, tidyverse, ncdf4, raster, ggplot2, reshape2, sf, readr, patchwork)
+
+# setwd to project directory
+this_file <- rstudioapi::getSourceEditorContext()$path
+ setwd(dirname(this_file))
+ setwd("..")
 ```
+
 
 # Load and clean files
 
@@ -89,8 +89,8 @@ Herring_LAI <- Herring_full %>%
          Recruitment_low = as.integer(Recruitment_low * (LAI_perc. / 100))) %>%
   dplyr::select(year, component, LAI_perc., SSB_component, l_bnd_component, u_bnd_component, F, F_high, F_low, Recruitment, Recruitment_high, Recruitment_low) %>%
   drop_na()
-
 ```
+
 
 ## Environmental data import
 
@@ -116,6 +116,7 @@ env_df_subset <- process_env_data_seasonal(env_data_full,
 ### Clear large data
 env_data_full <- NULL
 ```
+
 
 ## CPR data import
 
@@ -145,6 +146,7 @@ test_data_quality(cpr_full$small)       # Both metrics usable
 test_data_quality(cpr_component$phyto)  # Both metrics usable
 test_data_quality(cpr_component$small)  # Both metrics usable
 ```
+
 
 # Visual investigation
 
@@ -232,6 +234,7 @@ plot_R_component <- ggplot(Herring_LAI, aes(x = year, y = Recruitment / 1e6, col
 plot_R_component
 ```
 
+
 ## Environmental CPR visualization
 
 ```{r}
@@ -249,6 +252,7 @@ plot_env_grid <- plot_env_data_dual(env_df_full, env_df_subset,
 
 print(plot_env_grid)
 ```
+
 
 # Save data and plots
 
@@ -270,6 +274,7 @@ save(env_df_subset, file = file.path("data/", "env_df_subset.Rdata"))
 save(cpr_full, file = file.path("data/", "cpr_full.Rdata"))
 save(cpr_component, file = file.path("data/", "cpr_component.Rdata"))
 ```
+
 
 ## Save plots
 

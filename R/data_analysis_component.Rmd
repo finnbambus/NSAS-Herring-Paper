@@ -9,35 +9,30 @@ output: html_document
 knitr::opts_knit$set(root.dir = normalizePath(".."))
 ```
 
+
 ## Load Packages
 
 ```{r}
-setwd("~/R Studio/NSAS Herring/NSAS-Herring")
+# installs packages if not already installed
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-library(bcp)
-library(changepoint)
-library(ggrepel)
-library(readxl)
-library(ggplot2)
-library(tidyverse)
-library(FSA)
-library(strucchange)
-library(MASS)
-library(hydroGOF)
-library(mgcv)
-library(INDperform)
-library(dplyr)
-library(purrr)
-library(progress)
-library(segmented)
-library(FLCore)
-library(gridExtra)
+pacman::p_load(bcp, changepoint, ggrepel, readxl, 
+  ggplot2, tidyverse, FSA, strucchange, 
+  MASS, hydroGOF, mgcv, INDperform, 
+  dplyr, purrr, progress, segmented, 
+  FLCore, gridExtra)
+
+# setwd to project directory
+this_file <- rstudioapi::getSourceEditorContext()$path
+ setwd(dirname(this_file))
+ setwd("..")
 ```
+
 
 ## Import data
 
 ```{r}
-load("data/Herring_LAI.Rdata")
+load("./data/Herring_LAI.Rdata")
 
 ### Load functions from "functions"
 source("R/functions.R")
@@ -51,6 +46,7 @@ Herring$Downs <- Herring_LAI[Herring_LAI$component == "Downs",]
 
 Herring_LAI <- NULL
 ```
+
 
 # Change-points
 
@@ -136,6 +132,7 @@ results_cpt$Downs <- changepoint_analysis(Herring$Downs,
 # CPT only: 1987, 1999, 2015, 2020  
 ```
 
+
 ## Plot change-points
 
 ```{r}
@@ -195,6 +192,7 @@ plots_SSB_cpt$Downs <- plot_SSB_cpt(data = Herring$Downs,
 plots_SSB_cpt$Downs
 ```
 
+
 ### Save plots
 
 ```{r}
@@ -212,6 +210,7 @@ ggsave(filename = file.path("plots/", "SSB_cpt_components.png"),
        height = 14,
        dpi = 300)
 ```
+
 
 ### Save plot as grid
 
@@ -336,6 +335,7 @@ ggsave(filename = file.path("plots/", "cpt_grid.png"),
        dpi = 300)
 ```
 
+
 # Hysteresis
 
 ## Analysis
@@ -403,6 +403,7 @@ results_brkpt$Downs <- breakpoint_analysis(Herring$Downs, "SSB_component", "F", 
 # 1987, 2002, 2009, 2016 
 ```
 
+
 ## Plotting
 
 ```{r}
@@ -422,6 +423,7 @@ plots_hysteresis$Downs <- plot_hysteresis(Herring$Downs, results_brkpt$Downs$bre
 plots_hysteresis$Downs
 ```
 
+
 ### save plot
 
 ```{r}
@@ -439,6 +441,7 @@ ggsave(filename = file.path("plots/", "hysteresis_components.png"),
        height = 14,
        dpi = 300)
 ```
+
 
 # SRR Non-Stationary
 
@@ -665,6 +668,7 @@ results_SRR$Downs <- srr_breakpoint_analysis(Herring$Downs, "SSB_component", "Re
 # 1980, 2000, 2007, 2014 
 ```
 
+
 ## Plotting
 
 ```{r}
@@ -729,6 +733,7 @@ plots_SRR$Downs <- plot_SRR(Herring$Downs, break_years = results_SRR$Downs$break
 plots_SRR$Downs
 ```
 
+
 #### save plot
 
 ```{r}
@@ -746,6 +751,7 @@ ggsave(filename = file.path("plots/", "SRR_components.png"),
        height = 14,
        dpi = 300)
 ```
+
 
 # tGAM
 
@@ -864,6 +870,7 @@ results_tgam$Downs_larv <- run_threshold_analysis(Herring$Downs,
 
 ####  no threshold accepted.
 ```
+
 
 ## Plot
 

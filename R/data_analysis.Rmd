@@ -9,29 +9,25 @@ output: html_document
 knitr::opts_knit$set(root.dir = normalizePath(".."))
 ```
 
+
 ## Load Packages
 
 ```{r}
-setwd("~/R Studio/NSAS Herring/NSAS-Herring")
+# installs packages if not already installed
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-library(bcp)
-library(changepoint)
-library(ggrepel)
-library(readxl)
-library(ggplot2)
-library(tidyverse)
-library(FSA)
-library(strucchange)
-library(MASS)
-library(hydroGOF)
-library(mgcv)
-library(INDperform)
-library(dplyr)
-library(purrr)
-library(progress)
-library(segmented)
-library(FLCore)
+pacman::p_load(bcp, changepoint, ggrepel, readxl, 
+  ggplot2, tidyverse, FSA, strucchange, 
+  MASS, hydroGOF, mgcv, INDperform, 
+  dplyr, purrr, progress, segmented, 
+  FLCore, gridExtra)
+
+# setwd to project directory
+this_file <- rstudioapi::getSourceEditorContext()$path
+ setwd(dirname(this_file))
+ setwd("..")
 ```
+
 
 ## Import data
 
@@ -41,6 +37,7 @@ load("data/Herring_full.Rdata")
 ### Load plotting function from "functions.R"
 source("R/functions.R")
 ```
+
 
 ### Plot Stock overview
 
@@ -62,6 +59,7 @@ ggsave(filename = file.path("plots/", "overview.png"),
        height = 10,
        dpi = 300)
 ```
+
 
 # Change-points
 
@@ -88,6 +86,7 @@ results_cpt <- changepoint_analysis(Herring_full,
 # BCP only: 1983  
 ```
 
+
 ## Plot Change-points
 
 ```{r}
@@ -104,6 +103,7 @@ plot_SSB_cpt_full <- plot_SSB_cpt(data = Herring_full,
 plot_SSB_cpt_full
 ```
 
+
 ### Save plots
 
 ```{r}
@@ -114,6 +114,7 @@ ggsave(filename = file.path("plots/", "SSB_cpt_full.png"),
        height = 5,
        dpi = 300)
 ```
+
 
 # Hysteresis
 
@@ -136,6 +137,7 @@ results_brkpt <- breakpoint_analysis(Herring_full, "SSB", "F", "year",
 # 1960, 1971, 1986, 2000 
 ```
 
+
 ## Plotting
 
 ```{r}
@@ -143,6 +145,7 @@ results_brkpt <- breakpoint_analysis(Herring_full, "SSB", "F", "year",
 plot_hysteresis_full <- plot_hysteresis(Herring_full, results_brkpt$break_years, "Full Stock")
 plot_hysteresis_full
 ```
+
 
 ### save plot
 
@@ -154,6 +157,7 @@ ggsave(filename = file.path("plots/", "hysteresis_full.png"),
        height = 5,
        dpi = 300)
 ```
+
 
 # SRR Non-Stationary
 
@@ -213,12 +217,14 @@ results_SRR <- srr_breakpoint_analysis(Herring_full, "SSB", "Recruitment", "year
 # 1981, 2002 
 ```
 
+
 ## Plotting
 
 ```{r}
 plot_SRR_full <- plot_SRR(Herring_full, break_years = results_SRR$break_years, "Full Stock", "strucchange")
 plot_SRR_full
 ```
+
 
 #### save plot
 
@@ -230,6 +236,7 @@ ggsave(filename = file.path("plots/", "SRR_full.png"),
        height = 5,
        dpi = 300)
 ```
+
 
 # tGAM
 
@@ -259,6 +266,7 @@ plot_gcv_Banks_SST_autumn <- plot_gcv_threshold(results_tgam$winter$SSS, "SSS-Fu
 dev.off()
 #### Threshold confirmed by gcv valley.
 ```
+
 
 ## Plotting
 
