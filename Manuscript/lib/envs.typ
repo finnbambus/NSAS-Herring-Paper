@@ -1,5 +1,4 @@
 // ─── CUSTOM ENVIRONMENTS ────────────────────────────────────────────
-
 #import "theme.typ": accent, accent-bg, font-sans
 
 #let rho-box(title: none, body) = {
@@ -8,22 +7,15 @@
     radius: 2pt,
     inset: (x: 6pt, y: 5pt),
     width: 100%,
-    {
-      if title != none {
+    {if title != none {
         text(fill: accent, weight: "bold", font: font-sans, title)
-        v(4pt)
-      }
+        v(4pt) }
       set text(fill: accent, size: 9pt)
-      body
-    },
-  )
-}
+      body}, ) }
 
-#let info-block(body) = rho-box(title: "Information", body)
-#let note-block(body) = rho-box(title: "Note", body)
-
-#let dropcap(letter, rest) = {
-  text(fill: accent, weight: "bold", size: 25pt, font: font-sans, letter)
-  h(0.15em)
-  rest
+#let note-block(body, title: none) = {
+  if title != none {
+    rho-box(title, body)
+  } else {
+    rho-box(body) } }
 }

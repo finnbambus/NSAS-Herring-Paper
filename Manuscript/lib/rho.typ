@@ -6,4 +6,4 @@
 #import "cover.typ":        show-cover
 #import "article-header.typ": show-article-header, abstract-box, info-box, keywords-line
 #import "layout.typ":       show-layout
-#import "envs.typ":         rho-box, info-block, note-block, dropcap
+#import "envs.typ":         rho-box, note-block

@@ -14,7 +14,8 @@
 // ── Document metadata ────────────────────────────────────────────────
 #let meta = (
   title:           "Regime-shift dynamics of the North Sea Autumn Spawning Herring (Clupea harengus) and its manifestation in individual spawning components.",
-  author:          "Finn Linus Krauss",
+  authors:         ((name: "Finn Linus Krauss", affils: (1,)),),
+  affiliations:    ((id: 1, text: "IMBRsea, Universiteit Gent"),),
   birthday:        "April 10, 2001",
   student_id:      "7468125",
   degree:          "Bachelor of Science",
@@ -25,9 +26,8 @@
   location:        "Hamburg, Germany",
   date:            "April 2026",
   supervisor:      "Dr. Alexandra Blöcker",
-  logo:            none,   // e.g. "figures/university-hamburg.png"
-  // Article-header fields
-  email:           "finn.linus.krauss@imbrsea.eu",
+  logo:            none,
+  email:           ("finn.linus.krauss@imbrsea.eu",),
   defended:        none,
   accepted:        none,
   published:       none,
@@ -140,11 +140,6 @@ The four recognized spawning components of NSAS herring are shown in @fig:compon
   caption: [Map of the North Sea with recognized NSAS herring spawning components
     (Shetland-Orkney, Buchan, Banks, and Downs).],
 ) <fig:component_map>
-
-#info-block[
-  A *regime shift* is defined as an abrupt, persistent change in ecosystem structure
-  and function that persists for multiple years.
-]
 
 == Background
 

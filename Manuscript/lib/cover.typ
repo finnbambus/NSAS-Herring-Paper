@@ -2,6 +2,8 @@
 #import "@preview/wordometer:0.1.5": total-words, total-characters
 
 #let show-cover(meta) = {
+  let author-names = meta.authors.map(a => a.name).join(", ")
+
   set page(
     margin: (left: 2.5cm, right: 2.5cm, top: 2.4cm, bottom: 2.4cm),
     numbering: none,   // ← removes the page number from cover
@@ -25,7 +27,7 @@
   v(1fr)
 
   align(left, {
-    let primary = text(font: font-sans, size: 11pt, meta.author) + super("1*")
+    let primary = text(font: font-sans, weight: "bold", size: 11pt, author-names) + super("1*")
     let line = if "supervisor" in meta {
       primary + text(font: font-sans, size: 11pt, ", ") + text(font: font-sans, size: 11pt, meta.supervisor) + super("1")
     } else { primary }
@@ -41,13 +43,17 @@
     linebreak()
   }
 
-  text(font: font-serif, size: 9pt, {
-    super("*") + " Corresponding Author: " + meta.author
-    if "email" in meta {
-      ", "
-      link("mailto:" + meta.email, text(fill: accent, meta.email))
+text(font: font-serif, size: 9pt, {
+  super("*")
+  [ Corresponding Author: ]
+  if "email" in meta and meta.email != none {
+    let emails = if type(meta.email) == array { meta.email } else { (meta.email,) }
+    for (i, addr) in emails.enumerate() {
+      if i > 0 { [, ] }
+      link("mailto:" + addr, text(fill: accent, addr))
     }
-  })
+  }
+})
 
   // Counts auto-resolve to full document totals
   v(0.5cm)
