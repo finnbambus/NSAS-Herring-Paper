@@ -165,7 +165,7 @@ The four recognized spawning components of NSAS herring are shown in @fig:compon
 
 == Component-Level Analysis
 
-#note-block[
+#note-block(title: "title")[
   Northern components (Shetland-Orkney, Buchan) dominated the 1980s recovery phase.
 ]
 

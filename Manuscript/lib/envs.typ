@@ -15,7 +15,8 @@
 
 #let note-block(body, title: none) = {
   if title != none {
-    rho-box(title, body)
+    rho-box(title: title, body)  // ← named
   } else {
-    rho-box(body) } }
+    rho-box(body)
+  }
 }
