@@ -23,7 +23,7 @@ pacman::p_load(bcp, changepoint, ggrepel, readxl,
   FLCore, gridExtra)
 
 # setwd to project directory
-this_file <- rstudioapi::getSourceEditorContext()$path
+this_file <- here::here()
  setwd(dirname(this_file))
  setwd("..")
 ```
