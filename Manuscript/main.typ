@@ -68,7 +68,7 @@ The four recognized spawning components of NSAS herring are shown in @fig:compon
   image("../plots/component_map.png", width: 100%),
   caption: [Map of the North Sea with recognized NSAS herring spawning components
     (Shetland-Orkney, Buchan, Banks, and Downs).],
-) <fig:component_map>
+) <fig:component_map> 
 
 = Methods
 
