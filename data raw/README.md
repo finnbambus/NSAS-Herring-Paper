@@ -3,6 +3,11 @@ various sources. The data was received in May / June 2025.
 
 ### Environmental Data
 
+*Note: the environmental and plankton datasets below (NS CPR, NS SST
+Monthly.nc, NS SSS Monthly.nc) are no longer used by the analysis — the
+environmental-driver analysis of the thesis version was removed for the
+paper. They are kept here for reference.*
+
 -   **NS CPR** contains abundance data from the continuous plankton
     recorder project. It was requested at the Marine Biological
     Association and made available by Pierre Helaouet.

@@ -10,23 +10,18 @@ knitr::opts_knit$set(root.dir = normalizePath(".."))
 ```
 
 
+
 ## Load Packages
 
 ```{r}
 # installs packages if not already installed
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-pacman::p_load(bcp, changepoint, ggrepel, readxl, 
-  ggplot2, tidyverse, FSA, strucchange, 
-  MASS, hydroGOF, mgcv, INDperform, 
-  dplyr, purrr, progress, segmented, 
-  FLCore, gridExtra)
-
-# setwd to project directory
-this_file <- here::here()
- setwd(dirname(this_file))
- setwd("..")
+pacman::p_load(bcp, changepoint, ggrepel,
+  ggplot2, tidyverse, FSA, strucchange,
+  MASS, segmented)
 ```
+
 
 
 ## Import data
@@ -34,77 +29,55 @@ this_file <- here::here()
 ```{r}
 load("data/Herring_full.Rdata")
 
-### Load plotting function from "functions.R"
 source("R/functions.R")
 ```
 
 
-### Plot Stock overview
-
-```{r}
-plot_overview <- plot_herring_summary(
-  srr_data = Herring_full,
-  ssb_col = "SSB",
-  recruit_col = "Recruitment",
-  year_col = "year",
-  f_col = "F",
-  ssb_hlines = 1.31,
-  f_hlines = 0.32)
-
-
-ggsave(filename = file.path("plots/", "overview.png"),
-       plot(plot_overview),
-       bg = "white",
-       width = 5,
-       height = 10,
-       dpi = 300)
-```
-
 
 # Change-points
-
-## Identify change-points
+**Analysis:**
+`bcp()` is MCMC-based; `changepoint_analysis()` fixes the seed and runs 5000
+iterations so the changepoint set is reproducible (verified stable across seeds).
 
 ```{r}
-### cpt analysis
-results_cpt <- changepoint_analysis(Herring_full, 
+results_cpt <- changepoint_analysis(Herring_full,
                                           region_name = "Full Stock",
                                           year_col = "year",
                                           Q = 6,
                                           bcp_threshold = 0.5,
                                           ssb_col = "SSB")
-# CPT changepoint indices:  4,    16,   18,   34,   37,   51 
-# CPT changepoint years:    1950, 1964, 1966, 1986, 2000, 2018 
-
-## BCP Analysis
-# BCP changepoint indices:  20,   37,   54 
-# BCP changepoint years:    1966, 1983, 2000 
-
-## Consensus Analysis
-# Consensus changepoints (± 1 yr, min 5 yr apart): 1966, 2000 
-# CPT only: 1950, 1964, 1986, 2018 
-# BCP only: 1983  
 ```
 
 
-## Plot Change-points
+**Results:**
+```
+CPT changepoint years:  1950, 1964, 1966, 1986, 2000, 2018
+BCP changepoint years:  1966, 1983, 2000
+
+Consensus changepoints (± 1 yr, min 5 yr apart): 1966, 2000
+CPT only: 1950, 1964, 1986, 2018
+BCP only: 1983
+```
+
+
+**Plot:**
 
 ```{r}
-### Call function plot_SSB_cpt
 plot_SSB_cpt_full <- plot_SSB_cpt(data = Herring_full,
-              changepoints = c(1966,2000), 
+              changepoints = c(1966,2000),
               ribbon_colors = c("#201124", "#3e478d", "#318ca5"),
               vline_colors = c("black", "black"),
-              component = "Full Stock", 
-              SSB_column = "SSB", 
-              l_bnd_column = "l_bnd", 
-              u_bnd_column = "u_bnd", 
+              component = "Full Stock",
+              SSB_column = "SSB",
+              l_bnd_column = "l_bnd",
+              u_bnd_column = "u_bnd",
               show_hlines = TRUE)
 plot_SSB_cpt_full
 ```
 
 
-### Save plots
+
+**Save plots**
 
 ```{r}
 ggsave(filename = file.path("plots/", "SSB_cpt_full.png"),
@@ -116,38 +89,41 @@ ggsave(filename = file.path("plots/", "SSB_cpt_full.png"),
 ```
 
 
-# Hysteresis
 
-## Analysis
+# Hysteresis
+**Analysis:**
+The SSB-F cross-correlation (complete observations only) indicates a **3-year
+lag**; `breakpoint_analysis()` computes the lagged SSB internally, and a lagged
+column is also added for the hysteresis plot.
 
 ```{r}
-### Check for time-lags
-ccf(Herring_full$SSB[-(79:78)], Herring_full$F[-(79:78)], type = "correlation") # 3 years lag
-Herring_full$SSB_lag <- lag(Herring_full$SSB, 3)
+ok <- complete.cases(Herring_full[c("SSB", "F")])
+ccf(Herring_full$SSB[ok], Herring_full$F[ok], type = "correlation")
 
-### Call "breakpoint_analysis" function
+Herring_full$SSB_lag <- dplyr::lag(Herring_full$SSB, 3)
+
 results_brkpt <- breakpoint_analysis(Herring_full, "SSB", "F", "year",
-                                    lag_years = 3, 
+                                    lag_years = 3,
                                     region_name = "Full Stock")
-
-# Optimal number of breaks: 4 
-# Best breakpoint F values:
-# 0.25  1.43  0.43  0.22 
-# Best breakpoint years:
-# 1960, 1971, 1986, 2000 
 ```
 
 
-## Plotting
+**Results:**
+```
+Optimal number of breaks: 4
+Best breakpoint F values: 0.25, 1.43, 0.43, 0.22
+Best breakpoint years:    1960, 1971, 1986, 2000
+```
+
+**Plot:**
 
 ```{r}
-### Call function plot_hysteresis
 plot_hysteresis_full <- plot_hysteresis(Herring_full, results_brkpt$break_years, "Full Stock")
 plot_hysteresis_full
 ```
 
 
-### save plot
+**Save Plot:**
 
 ```{r}
 ggsave(filename = file.path("plots/", "hysteresis_full.png"),
@@ -159,38 +135,30 @@ ggsave(filename = file.path("plots/", "hysteresis_full.png"),
 ```
 
 
-# SRR Non-Stationary
 
-## Analysis
+# SRR Non-Stationary
+**Analysis:**
+The SRR models pair R(y) with SSB(y) (same-year, no larval-to-recruitment lag),
+following Blöcker et al. 2023.
 
 ```{r}
-### Run model comparison from model_comp_functions.R 
 source("R/model_comp_functions.R")
 
 models_SRR <- run_srr_analysis(
   data_for_srr = Herring_full,
-  recruit_col = "Recruitment", 
-  ssb_col = "SSB",
-  max_breaks = 4,
-  use_bic = TRUE)
+  recruit_col = "Recruitment",
+  ssb_col = "SSB")
 
 print(models_SRR$comparison_table)
-#               Model          AIC     RMSE  R_squared
-#        independence 2.777474e+03 12571251 0.07056036
-#       beverton_holt 12160648 0.17631638
-#              ricker 1.113423e+02 12369273 0.15890238
-#   segmented_regular 2.760880e+03 11016520 0.28623866
-#       segmented_log 9.301744e+01 29027744 0.60192295
-#  segmented_negbinom 2.741850e+03 11015926         NA
-#         strucchange 2.729688e+03  8791700 0.54542040
-#        glm_gaussian 2.777474e+03 12571251         NA
-#         glm_poisson 5.007045e+08 12644111         NA
-#    glm_quasipoisson           NA 12644111         NA
-#        glm_negbinom 2.777921e+03 12705255
+```
 
-#### strucchange lowest RMSE.
 
-### Prep data for LOOCV function
+RMSE and R² are computed on the response scale for all models; AIC is only
+reported for models fitted on the raw response (log-scale likelihoods are not
+comparable). **strucchange has the lowest in-sample RMSE of all models.**
+
+```{r}
+### Prep data for LOOCV & run loocv for all models
 dat <- Herring_full %>%
   mutate(R_log = log(Recruitment),
          SSB_log = log(SSB)) %>%
@@ -199,26 +167,39 @@ dat <- Herring_full %>%
   setNames(c("Year", "R", "SSB", "R_log", "SSB_log")) %>%
   as.data.frame()
 
-### Call function "cross_valid" for performing loocv for all models
 rmse_mean_herring <- cross_valid(dataset = dat)
-#         linear    beverton    ricker      segmented   seg.log     segm.glm    strucchange
-# TEST:   10164856  9080981     10040655    9437569     9475234     9394538     12472272
-# TRAIN:  12568771  12158586    12366932    11012203    11184582    11014417    8777879
-
-#### strucchange validated by loocv.
-
-### Call function "srr_breakpoint_analysis"
-results_SRR <- srr_breakpoint_analysis(Herring_full, "SSB", "Recruitment", "year", "Herring Full")
-
-# Optimal number of breaks: 2 
-# Best breakpoint SSB values:
-# 264793.8, 2391903.7 
-# Best breakpoint years:
-# 1981, 2002 
 ```
 
 
-## Plotting
+**LOOCV Results:** (all 78 folds contribute for every model — see
+`rmse_mean_herring$n_test_folds`):
+
+```
+        linear    beverton    ricker      segmented   seg.log     segm.glm    strucchange
+TEST:   10164856  9080981     10040655    9437569     9475234     9394547     12535650
+TRAIN:  12568771  12158586    12366932    11012203    11184582    11014416    8786426
+```
+
+strucchange has the lowest train RMSE but the highest test RMSE of all models,
+it fits the observed series closely while predicting held-out years poorly. The
+stationary SRR models predict better but describe the series worse, consistent
+with strucchange capturing regime structure rather than a single predictive
+stock-recruitment relationship.
+
+```{r}
+results_SRR <- srr_breakpoint_analysis(Herring_full, "SSB", "Recruitment", "year", "Herring Full")
+```
+
+
+**Results:**
+
+```
+Optimal number of breaks: 2
+Best breakpoint SSB values: 264793.8, 2391903.7
+Best breakpoint years:      1981, 2002
+```
+
+**Plot:**
 
 ```{r}
 plot_SRR_full <- plot_SRR(Herring_full, break_years = results_SRR$break_years, "Full Stock", "strucchange")
@@ -226,7 +207,8 @@ plot_SRR_full
 ```
 
 
-#### save plot
+
+**Save Plot:**
 
 ```{r}
 ggsave(filename = file.path("plots/", "SRR_full.png"),
@@ -234,66 +216,5 @@ ggsave(filename = file.path("plots/", "SRR_full.png"),
        bg = "white",
        width = 7,
        height = 5,
-       dpi = 300)
-```
-
-
-# tGAM
-
-```{r}
-### Load env data
-load("data/env_df_full.Rdata")
-
-### Call "run_threshold_analysis" from functions and extract results (below)
-results_tgam <- run_threshold_analysis(Herring_full, env_df_full, 
-                       aggregation_mode = "all", 
-                       test_variables = c("Mean_SST", "Mean_SSS"))
-
-# results_tgam[["summary_tables"]][["year"]]
-#   Variable  n edf_before edf_after p_value_min Threshold Threshold_accepted
-#   Mean_SST 64      0.667     0.993    4.51e-14      10.4    No tGAM (LOOCV)
-#   Mean_SSS 64      0.667     0.000    2.56e-23      34.1    No tGAM (LOOCV)
-
-# results_tgam[["summary_tables"]][["winter"]]
-#   Variable  n edf_before edf_after p_value_min Threshold Threshold_accepted
-#   Mean_SST 64      0.667     0.989    4.29e-11       7.1    No tGAM (LOOCV)
-#   Mean_SSS 64      0.667     0.000    6.66e-21      34.3                Yes
-
-#### SSS threshold accepted for larval overwintering.
-
-png(filename = "plots/tGAM/SSS_Full_larv.png", width = 1500, height = 1000, res = 300)
-plot_gcv_Banks_SST_autumn <- plot_gcv_threshold(results_tgam$winter$SSS, "SSS-Full Stock", "(Winter)")
-dev.off()
-#### Threshold confirmed by gcv valley.
-```
-
-
-## Plotting
-
-```{r}
-### Prep data for plotting
-tgam_input <- Herring_full %>%
-  dplyr::select(year, SSB, Recruitment) %>%
-  left_join(
-    env_df_full %>%
-      filter(Season == "Winter") %>%
-      dplyr::select(year, Mean_SSS),
-    by = "year"
-  ) %>%
-  drop_na() %>%
-  mutate(SSB_lag = lag(SSB, n = 3)) %>%
-  drop_na() %>%
-  arrange(SSB_lag) %>%
-  rename(Year = year)
-
-### Plot using "plot_tgam" from funtions
-plot_tgam_full_larv <- plot_tgam_complete(tgam_input, threshold = 34.3, env_var = "Mean_SSS")
-
-### save plot
-ggsave(filename = file.path("plots/tGAM", "Full_SSS_larv.png"),
-       plot = plot_tgam_full_larv,
-       bg = "white",
-       width = 10,
-       height = 7,
        dpi = 300)
 ```

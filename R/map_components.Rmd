@@ -9,19 +9,16 @@ output: html_document
 knitr::opts_knit$set(root.dir = normalizePath(".."))
 ```
 
+
 ## Load Packages
 
 ```{r}
 # installs packages if not already installed
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-pacman::p_load(sf, ggplot2, dplyr, elevatr, rnaturalearth, ggnewscale, grid)
-
-# setwd to project directory
-this_file <- rstudioapi::getSourceEditorContext()$path
- setwd(dirname(this_file))
- setwd("..")
+pacman::p_load(sf, ggplot2, dplyr, elevatr, raster, rnaturalearth, ggnewscale, grid)
 ```
+
 
 ## Load Data & Build Map
 
@@ -168,9 +165,12 @@ bathymetric_map <- ggplot() +
     plot.background = element_rect(fill = "white", color = NA))
 
 # Display the map
-#print(bathymetric_map)
+print(bathymetric_map)
+```
 
-# Save the map
+**Save Map:**
+
+```{r}
 ggsave(filename = file.path("plots/", "component_map.png"), 
        plot = bathymetric_map,
        width = 15, height = 15, 

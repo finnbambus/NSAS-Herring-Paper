@@ -2,4 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+.DS_Store
+R/*.html
 data raw/Global SST Monthly Mean.nc
