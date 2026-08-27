@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = normalizePath(".."))
+knitr::opts_knit$set(root.dir = here::here())
 ```
 
 
@@ -16,7 +16,7 @@ knitr::opts_knit$set(root.dir = normalizePath(".."))
 # installs packages if not already installed
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-pacman::p_load(sf, ggplot2, dplyr, elevatr, raster, rnaturalearth, ggnewscale, grid)
+pacman::p_load(sf, ggplot2, dplyr, elevatr, raster, rnaturalearth, ggnewscale, grid, here)
 ```
 
 

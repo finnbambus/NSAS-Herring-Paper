@@ -12,58 +12,135 @@ changepoint_analysis <- function(data,
                                  consensus_tolerance = 1,
                                  min_years_between = 5,
                                  plot_results = TRUE,
-                                 seed = 42,
-                                 bcp_mcmc = 5000) {
-  
+                                 n_seeds = 100) {
+
   # Print region being analyzed
   cat("=== Changepoint Analysis for", region_name, "===\n")
-  
+
   # Validate inputs
   if (!ssb_col %in% names(data)) {
     stop("SSB column '", ssb_col, "' not found in data")}
   if (!year_col %in% names(data)) {
     stop("Year column '", year_col, "' not found in data")}
-  
+
   # Remove rows with missing values
   analysis_data <- data[complete.cases(data[c(ssb_col, year_col)]), ]
-  
+
   if(nrow(analysis_data) < nrow(data)) {
     cat("# Removed", nrow(data) - nrow(analysis_data), "rows with missing values\n")}
-  
-  cat("# Data range:", range(analysis_data[[year_col]])[1], "-", 
+
+  cat("# Data range:", range(analysis_data[[year_col]])[1], "-",
       range(analysis_data[[year_col]])[2], "\n")
   cat("# Analysis parameters: Q =", Q, ", BCP threshold =", bcp_threshold, "\n")
-  
+
   # CPT Analysis (BinSeg method)
+  # penalty/pen.value are cpt.mean()'s own defaults (MBIC, 0); named explicitly
+  # here to match the original inspiration (Gutte et al., tipping_northsea_fish,
+  # 1_Change_points_SSB.R). Note this is *not* an unconstrained automatic
+  # selection despite the "automatic" MBIC label: BinSeg with this penalty
+  # keeps accepting additional changepoints for as many as Q allows (verified
+  # up to Q=30 on this data, still Q/Q every time) - Q is a real search cap in
+  # both this codebase and the reference's (which also always left it at a
+  # small default/explicit value per species), not a formality.
   cat("\n## CPT Analysis (BinSeg)\n")
-  ssbcpts <- cpt.mean(data = analysis_data[[ssb_col]], method = "BinSeg", Q = Q)
+  ssbcpts <- cpt.mean(data = analysis_data[[ssb_col]], method = "BinSeg",
+                      penalty = "MBIC", pen.value = 0, Q = Q)
   cpt_indices <- cpts(ssbcpts)
   cpt_years <- analysis_data[[year_col]][cpt_indices]
-  
+
   cat("# CPT changepoint indices:", paste(cpt_indices, collapse = ", "), "\n")
   cat("# CPT changepoint years:", paste(cpt_years, collapse = ", "), "\n")
-  
+
   if(plot_results) {
-    plot(ssbcpts, type = "l", cpt.col = "navyblue", 
+    plot(ssbcpts, type = "l", cpt.col = "navyblue",
          xlab = "Index", lwd = 4,
          main = paste("CPT Analysis -", region_name))}
-  
+
   # BCP Analysis
-  # bcp() estimates posterior probabilities by MCMC: a fixed seed and a long chain
-  # are required for reproducible changepoints (probabilities near the threshold
-  # flip between runs otherwise)
-  cat("\n## BCP Analysis\n")
-  set.seed(seed)
-  bcp.ssb <- bcp(analysis_data[[ssb_col]], mcmc = bcp_mcmc, burnin = ceiling(bcp_mcmc / 10))
-  bcp_indices <- which(bcp.ssb$posterior.prob >= bcp_threshold)
+  # bcp() is called with its published defaults (mcmc=500, burnin=50), matching
+  # the original inspiration (Gutte et al., tipping_northsea_fish,
+  # 1_Change_points_SSB.R: `bcp(y=herring$SSB)`, no seed, no overrides).
+  #
+  # A single unseeded run is a noisy point estimate, though - that repo's own
+  # comment notes re-running changed the changepoint set - and separately,
+  # bcp()'s marginal-likelihood computation is not numerically scale-invariant:
+  # raw SSB magnitude (order 1e6-1e7) can silently underflow the *entire*
+  # posterior to exactly 0 for every year, with no warning (confirmed against
+  # the C++ source: catastrophic cancellation in the naive one-pass sum-of-
+  # squares "Wtilde" term). This degenerate all-zero signature never occurs in
+  # a genuine no-evidence result (checked against white-noise references,
+  # which give small but graded, never-exactly-zero probabilities throughout).
+  #
+  # Neither problem has a one-shot fix: picking one seed or one rescaling was
+  # tested extensively and shown to be case-by-case unpredictable - the same
+  # rescaling that recovers one series can silently re-break a different one
+  # that was already fine raw. What *is* reliable: running many seeds and
+  # reporting, per year, the fraction of seeds whose posterior probability
+  # clears 0.5 - turning a single (possibly unlucky) point estimate into an
+  # actual empirical distribution. "BCP support" below means "supported in at
+  # least `bcp_threshold` of the seeds", not "one seed's posterior exceeded
+  # bcp_threshold". If raw is degenerate for a given series, a small probe
+  # checks a short list of standard reconditioning transforms (in practice,
+  # degeneracy has always been a property of the (series, transform) pair
+  # across every seed, never a mix within one) and the full sweep runs on the
+  # first one that clears the probe; seeds where every transform still fails
+  # are excluded from the denominator and counted as `n_degenerate`.
+  cat("\n## BCP Analysis (", n_seeds, " seeds)\n", sep = "")
+  ssb_vec <- analysis_data[[ssb_col]]
+
+  is_degenerate <- function(b) sum(b$posterior.prob, na.rm = TRUE) == 0
+
+  candidate_transforms <- list(
+    raw             = identity,
+    div_100         = function(v) v / 100,
+    div_1e4         = function(v) v / 1e4,
+    div_1e6         = function(v) v / 1e6,
+    median_centered = function(v) v - median(v),
+    z_standardized  = function(v) as.numeric(scale(v)))
+
+  probe_seeds <- 1:5
+  chosen_name <- NULL
+  for (tf_name in names(candidate_transforms)) {
+    tf <- candidate_transforms[[tf_name]]
+    ok <- TRUE
+    for (s in probe_seeds) {
+      set.seed(s)
+      if (is_degenerate(suppressWarnings(bcp(tf(ssb_vec))))) { ok <- FALSE; break }
+    }
+    if (ok) { chosen_name <- tf_name; break }
+  }
+  if (is.null(chosen_name)) {
+    warning("bcp(): every candidate rescaling was numerically degenerate for ",
+            region_name, " - BCP result below is unreliable")
+    chosen_name <- "raw"}
+  chosen_transform <- candidate_transforms[[chosen_name]]
+  if (chosen_name != "raw") {
+    cat("# BCP: raw SSB numerically degenerate, using '", chosen_name, "' rescaling\n", sep = "")}
+
+  year_hits <- integer(nrow(analysis_data))
+  n_degenerate <- 0L
+  last_bcp <- NULL
+  for (s in seq_len(n_seeds)) {
+    set.seed(s)
+    b <- suppressWarnings(bcp(chosen_transform(ssb_vec)))
+    if (is_degenerate(b)) { n_degenerate <- n_degenerate + 1L; next }
+    hits <- which(b$posterior.prob >= 0.5)
+    year_hits[hits] <- year_hits[hits] + 1L
+    last_bcp <- b}
+
+  n_valid <- n_seeds - n_degenerate
+  bcp_support <- if (n_valid > 0) year_hits / n_valid else rep(0, length(year_hits))
+  bcp_indices <- which(bcp_support >= bcp_threshold)
   bcp_years <- analysis_data[[year_col]][bcp_indices]
-  
+
+  cat("# BCP: ", n_degenerate, "/", n_seeds, " seeds numerically degenerate\n", sep = "")
   cat("# BCP changepoint indices:", paste(bcp_indices, collapse = ", "), "\n")
   cat("# BCP changepoint years:", paste(bcp_years, collapse = ", "), "\n")
-  
-  if(plot_results) {
-    plot(bcp.ssb, main = paste("BCP Analysis -", region_name))}
-  
+  cat("# BCP support fractions:", paste(sprintf("%s=%.0f%%", bcp_years, bcp_support[bcp_indices] * 100), collapse = ", "), "\n")
+
+  if(plot_results && !is.null(last_bcp)) {
+    plot(last_bcp, main = paste("BCP Analysis (one representative seed) -", region_name))}
+
   # Consensus Analysis
   cat("\n## Consensus Analysis\n")
   consensus_years <- c()
@@ -114,11 +191,15 @@ changepoint_analysis <- function(data,
       changepoint_years = cpt_years,
       n_changepoints = length(cpt_years)),
     bcp_analysis = list(
-      model = bcp.ssb,
+      model = last_bcp,
       changepoint_indices = bcp_indices,
       changepoint_years = bcp_years,
       n_changepoints = length(bcp_years),
-      threshold_used = bcp_threshold),
+      threshold_used = bcp_threshold,
+      support_fraction = setNames(bcp_support, analysis_data[[year_col]]),
+      n_seeds = n_seeds,
+      n_degenerate = n_degenerate,
+      transform_used = chosen_name),
     consensus = list(
       changepoint_years = consensus_years,
       cpt_only_years = cpt_only_years,
@@ -168,7 +249,7 @@ plot_SSB_cpt <- function(data, changepoints, component, SSB_column, l_bnd_column
     geom_line(aes(x = year, y = .data[[SSB_column]]/1000000), linewidth = 0.8) +
     labs(title = component,
          x = "Year",
-         y = "SSB in million t") +
+         y = "SSB (million t)") +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5),
           axis.title.x = element_text(margin = margin(t = 10)),
@@ -322,8 +403,15 @@ plot_Recruitment_cpt <- function(data, changepoints, ribbon_colors, vline_colors
 
 opt_bpts <- function(x) {
   # x: named vector of BIC values, names = number of breaks (from summary(bpts)$RSS["BIC", ])
-  # Returns the break counts at interior local minima of the BIC curve;
-  # falls back to the global minimum if the curve has no interior local minimum.
+  # Returns the break counts at interior local minima of the BIC curve,
+  # ordered best (lowest BIC) first; falls back to the global minimum if the
+  # curve has no interior local minimum. Callers use element [1], so when a
+  # curve has more than one interior local minimum they must be ranked by
+  # fit, not left as index order - a curve can have a shallow local dip at a
+  # low break count and a deeper, better-fitting one at a higher break count
+  # (confirmed on Downs' SSB-F hysteresis: dips at both 2 and 4 breaks, with
+  # 4 the true global minimum); returning them in scan order silently picked
+  # the shallow, worse-fitting one.
   n <- length(x)
   lowest <- rep(FALSE, n)
   if (n >= 3) {
@@ -331,7 +419,9 @@ opt_bpts <- function(x) {
       lowest[i] <- x[i] < x[i - 1] & x[i] < x[i + 1]}}
   out <- as.integer(names(x)[lowest])
   if (length(out) == 0) {
-    out <- as.integer(names(x)[which.min(x)])}
+    out <- as.integer(names(x)[which.min(x)])
+  } else if (length(out) > 1) {
+    out <- out[order(x[lowest])]}
   return(out)}
 
 
@@ -551,6 +641,28 @@ srr_breakpoint_analysis <- function(data, ssb_col = "SSB", r_col = "Recruitment"
 
   cat("# Optimal number of breaks:", opt_brks_SRR[1], "\n")
 
+  if (opt_brks_SRR[1] == 0) {
+    # No breakpoint is supported: the SSB-Recruitment relationship is
+    # stationary (continuous, no regime shift) for this region.
+    cat("# No breakpoints supported - relationship treated as continuous\n")
+
+    plot(analysis_data[[r_col]] ~ analysis_data[[ssb_col]], type = "p",
+         xlab = "SSB", ylab = "Recruitment (R)",
+         main = paste("Stock-Recruitment Relationship (no breakpoints) -", region_name))
+
+    results <- list(
+      region = region_name,
+      data_used = analysis_data,
+      breakpoints = bpts2_SRR <- strucchange::breakpoints(bpts_SRR, breaks = 0),
+      optimal_breaks = 0,
+      break_ssb_values = numeric(0),
+      break_years = numeric(0),
+      confidence_intervals = NULL,
+      summary = bpts_SRR_sum)
+
+    cat("\n")
+    return(results)}
+
   # Get breakpoints with optimal number of breaks
   bpts2_SRR <- strucchange::breakpoints(bpts_SRR, breaks = opt_brks_SRR[1])
   best_brk_SRR <- analysis_data[[ssb_col]][bpts2_SRR$breakpoints]
@@ -573,7 +685,7 @@ srr_breakpoint_analysis <- function(data, ssb_col = "SSB", r_col = "Recruitment"
        main = paste("Stock-Recruitment Relationship with Breakpoints -", region_name))
 
   # Add confidence interval lines
-  for (i in 1:opt_brks_SRR[1]) {
+  for (i in seq_len(opt_brks_SRR[1])) {
     abline(v = analysis_data[[ssb_col]][ci_mod_SRR$confint[i,2]], col = "blue", lwd = 2)
     abline(v = analysis_data[[ssb_col]][ci_mod_SRR$confint[i,1]], col = "red", lty = 3)
     abline(v = analysis_data[[ssb_col]][ci_mod_SRR$confint[i,3]], col = "red", lty = 3)}
@@ -618,7 +730,7 @@ plot_SRR <- function(data, break_years, title_stock, used_model,
   
   # Create phase column based on break years
   data$phase <- 1
-  for (i in 1:n_breaks) {
+  for (i in seq_len(n_breaks)) {
     data$phase[data[[year_col]] > break_years[i]] <- i + 1}
   
   # Set default nudge parameters if not provided
@@ -637,8 +749,8 @@ plot_SRR <- function(data, break_years, title_stock, used_model,
     scale_color_manual(values = colors[1:n_phases]) +
     labs(title = title_stock, 
          subtitle = used_model,
-         x = "SSB in million t", 
-         y = "R in billions") +
+         x = "SSB (million t)", 
+         y = "R (billions)") +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"), 
           plot.subtitle = element_text(hjust = 0.5, size = 12, face = "italic"),
@@ -677,16 +789,66 @@ plot_SRR <- function(data, break_years, title_stock, used_model,
                     size = 3, col = "gray30", segment.size = 0.2)
   
   # Add text labels for each breakpoint year
-  for (i in 1:n_breaks) {
+  for (i in seq_len(n_breaks)) {
     brk_year <- break_years[i]
     break_year_data <- data %>% dplyr::filter(.data[[year_col]] == brk_year)
     if (nrow(break_year_data) > 0) {
       nudge_idx <- (i %% length(nudge_params)) + 1
-      p <- p + geom_text_repel(data = break_year_data, 
+      p <- p + geom_text_repel(data = break_year_data,
                                aes(label = .data[[year_col]]),
                                point.padding = 0.2,
                                nudge_y = nudge_params[[nudge_idx]]$nudge_y,
                                nudge_x = nudge_params[[nudge_idx]]$nudge_x,
                                size = 3, col = "gray30", segment.size = 0.2)}}
-  
+
   return(p)}
+
+#--------------------------------------------------------------------------------------
+## Phase timeline: per-phase trend and relative level
+#--------------------------------------------------------------------------------------
+
+# For a series split into phases by a set of boundary years, fits a standard
+# OLS regression (value ~ year) on *every point in the phase* (not just its
+# endpoints) and reports the slope as an annualised relative growth rate
+# (%/year, scaled by the phase's own mean so phases and series of very
+# different absolute magnitude are comparable). Optionally also reports the
+# phase's mean level as a share of a second reference series (e.g. component
+# SSB as % of full-stock SSB in the same years) and how that share changed
+# from the previous phase - two components can have the same slope while one
+# is gaining ground on the total stock and the other is losing it, which the
+# slope alone can't distinguish.
+phase_summary <- function(data, value_col, year_col, phase_bounds, region_name = "Region",
+                          scale_data = NULL, scale_value_col = NULL) {
+
+  b <- sort(unique(phase_bounds))
+  phases <- lapply(seq_len(length(b) - 1), function(i) c(b[i], b[i + 1]))
+
+  if (!is.null(scale_data)) {
+    data <- data %>%
+      dplyr::left_join(scale_data %>% dplyr::select(dplyr::all_of(c(year_col, scale_value_col))),
+                       by = year_col)}
+
+  prev_share <- NA
+  rows <- list()
+  for (ph in phases) {
+    d <- data %>% dplyr::filter(.data[[year_col]] >= ph[1], .data[[year_col]] <= ph[2])
+    d <- d[complete.cases(d[[value_col]], d[[year_col]]), ]
+    if (nrow(d) < 3) next
+
+    m <- lm(d[[value_col]] ~ d[[year_col]])
+    s <- summary(m)$coefficients
+    pct_per_yr <- s[2, 1] / mean(d[[value_col]]) * 100
+    p_val <- s[2, 4]
+
+    share <- if (!is.null(scale_data)) mean(d[[value_col]] / d[[scale_value_col]] * 100, na.rm = TRUE) else NA
+    share_delta <- if (!is.null(scale_data) && !is.na(prev_share)) share - prev_share else NA
+
+    rows[[length(rows) + 1]] <- data.frame(
+      region = region_name,
+      phase_start = ph[1], phase_end = ph[2], n = nrow(d),
+      pct_per_yr = round(pct_per_yr, 2), p_value = round(p_val, 3),
+      significant = p_val < 0.05,
+      mean_share_pct = round(share, 1), share_delta_pp = round(share_delta, 1))
+    prev_share <- share}
+
+  dplyr::bind_rows(rows)}

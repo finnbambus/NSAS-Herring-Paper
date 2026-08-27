@@ -77,28 +77,15 @@ paper. They are kept here for reference.*
     -   DOI: <https://doi.org/10.1093/icesjms/fsab078>,
         <https://doi.org/10.17895/ices.pub.25305532.v8>
 
--   **NSAS SSB 2025.csv** contains Spawning Stock Biomass data for the
-    North Sea Herring. It was received from Niels T. Hintzen of the
-    Pelagic Freezer Trawler Association (PFA). Data is originally
-    provided by the ICES HAWG.
+-   **NSAS ICES data 2026** contains the official assessment data from
+    the ICES advice, taken directly from ICES.
 
-    -   Type: Yearly SSB data including coefficient variation as well as
-        upper and lower bound for each year.
+    -   Type: Yearly Recruitment, SSB (with upper and lower bound),
+        total catch and fishing mortality
 
-    -   Time Range: 1947 to 2025
+    -   Time Range: 1947 to 2026
 
-    -   DOI: <https://doi.org/10.1093/icesjms/fsab078>,
-        <https://doi.org/10.17895/ices.pub.25305532.v8>
-
--   **NSAS ICES data 2024** contains the official assessment data from
-    the ICES report 2024 version 3
-
-    -   Type: Yearly , Recruitment, SSB, total catch and fishing
-        mortality
-
-    -   Time Range: 1947 to 2024
-
-    -   DOI: <https://doi.org/10.17895/ices.advice.27677718.v3>
+    -   DOI: <https://doi.org/10.17895/ices.advice.32133961.v1>
 
 -   **components\_shp** contains geographical data for each component.
     The data was estimated from the maps provided in “Mind the gaps: a

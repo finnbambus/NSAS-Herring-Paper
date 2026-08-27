@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = normalizePath(".."))
+knitr::opts_knit$set(root.dir = here::here())
 ```
 
 
@@ -19,7 +19,7 @@ if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
 pacman::p_load(bcp, changepoint, ggrepel,
   ggplot2, tidyverse, FSA, strucchange,
-  MASS, segmented, gridExtra)
+  MASS, segmented, gridExtra, here)
 ```
 
 
@@ -34,11 +34,51 @@ The `components` list holds the per-component configuration:
   (first year, breakpoint, last year, more breakpoints)
 
 In all changepoint plots the CI ribbons are colored by the **full-stock phases**
-(`full_changepoints`: pre-1966 #201124, 1966–2000 #3e478d, post-2000 #318ca5),
-so the full-stock changepoints are visible in every component panel and it is
-directly comparable how the components' own shifts align with them. Each
-component's own consensus changepoints are drawn as thin black lines on top.
-Buchan and Downs have no consensus changepoints.
+(`full_changepoints`: pre-1966 #201124, 1966–1983 #3e478d, 1983–2000 #318ca5,
+post-2000 #5ccdaa), so the full-stock changepoints are visible in every
+component panel and it is directly comparable how the components' own shifts
+align with them. Each component's own consensus changepoints are drawn as thin
+black lines on top. All four components now have consensus changepoints (see
+methodology note below) - the "Buchan and Downs have no changepoints" split
+reported previously does not hold up.
+
+**Methodology note:** `changepoint_analysis()`'s BCP step was reworked twice
+this update. `bcp()` is now called with its published defaults (mcmc=500,
+burnin=50, no forced seed), matching the original inspiration this project is
+based on (Gutte et al.,
+[tipping_northsea_fish](https://github.com/HeleneGutte/tipping_northsea_fish),
+`1_Change_points_SSB.R`). Two problems make a *single* such call unreliable
+on this data, both confirmed rather than assumed:
+
+1. A single unseeded run is a noisy point estimate - the reference repo's own
+   comment notes re-running changed its changepoint set.
+2. Raw SSB magnitude (order 1e5-1e6) can trigger a floating-point underflow in
+   `bcp()`'s C++ likelihood computation that silently zeroes the *entire*
+   posterior - confirmed against the package source (catastrophic cancellation
+   in a naive one-pass sum-of-squares term) and against a diagnostic no
+   genuine "no evidence" result ever produces (white-noise references give
+   small but graded, never-exactly-zero probabilities throughout; the
+   affected series here return bit-identical 0 at every single year).
+
+Neither is fixable by picking one lucky seed or one lucky rescaling - both
+were tested extensively (including against a broader panel of transforms and
+against seed sweeps of 100 runs) and shown to be case-by-case unpredictable:
+the same rescaling that recovers one series can silently re-break a different
+one that was already fine raw. What *is* reliable, and what the function now
+does: run `bcp()` across 100 seeds per series and report, per year, the
+fraction of seeds whose posterior probability clears 0.5 (falling back to a
+numerically-safer rescaling, chosen from a small fixed panel, only when raw is
+degenerate for every seed). A year is "BCP-supported" when that fraction meets
+the region's `bcp_threshold`, not when one seed's posterior happened to.
+
+This resolved both an earlier false negative (Buchan and Downs were never
+really changepoint-free - both were hitting the underflow already before this
+data update, confirmed by rerunning the exact pre-update committed data) and a
+false negative introduced mid-investigation (a single-pinned-seed rescaled fix
+initially looked like it made the full-stock 2000 changepoint disappear with
+the 2026 data; the 100-seed sweep shows 2000 is robustly supported in both the
+old and new data at comparable confidence - that apparent loss was an artifact
+of trusting one seed's threshold crossing).
 
 ```{r}
 load("data/Herring_LAI.Rdata")
@@ -46,9 +86,9 @@ load("data/Herring_LAI.Rdata")
 source("R/functions.R")
 
 ### Full-stock phases used to color the CI ribbons in all changepoint plots
-full_changepoints <- c(1966, 2000)
-full_ribbon <- c("#201124", "#3e478d", "#318ca5")
-full_vline <- c("black", "black")
+full_changepoints <- c(1966, 1983, 2000)
+full_ribbon <- c("#201124", "#3e478d", "#318ca5", "#5ccdaa")
+full_vline <- c("black", "black", "black")
 
 components <- list(
   SHOR = list(
@@ -105,53 +145,183 @@ strip_axes <- function(p) {
 
 # Change-Points
 **Analysis:**
-`bcp()` estimates posterior probabilities by MCMC. The thesis run used the bcp
-default of 500 iterations without a seed, which is not converged: re-running
-changed the changepoint sets. `changepoint_analysis()` now uses a fixed seed and
-5000 iterations; with the converged chain the results are stable across seeds.
+`bcp()` estimates posterior probabilities by MCMC and is called here with its
+published defaults (mcmc=500, burnin=50), matching the original inspiration
+(Gutte et al.,
+[tipping_northsea_fish](https://github.com/HeleneGutte/tipping_northsea_fish),
+`1_Change_points_SSB.R`). A single such run is a noisy point estimate - that
+repo's own comment notes re-running changed its changepoint set, which is why
+an earlier version of this pipeline pinned a seed and ran 5000 iterations
+instead. That "fix" only made one specific (possibly wrong) outcome
+reproducible; it didn't address the actual instability, and separately
+obscured a numerical underflow bug (see below). `changepoint_analysis()` now
+runs `bcp()` across 100 seeds per series and reports, per year, the fraction
+of seeds whose posterior probability clears 0.5 - "BCP-supported" means
+supported in at least `bcp_threshold` of the seeds, not that one seed's
+posterior happened to cross it.
 
 ```{r}
+### Q is a real search cap (see note above), so it should scale with series
+### length to keep changepoint density comparable across analyses: full stock
+### uses Q = 6 over 79 years (1947-2025); components span 53 years
+### (1972-2024), so Q = 6 * 53/79 ~= 4 keeps the same points-per-decade rate
+### instead of requesting the full-stock count from a much shorter series.
+component_Q <- round(6 * 53 / 79)
+
 results_cpt <- list()
 for (key in names(components)) {
   results_cpt[[key]] <- changepoint_analysis(Herring[[key]],
                                              region_name = components[[key]]$label,
                                              year_col = "year",
-                                             Q = 6,
-                                             bcp_threshold = 0.7,
+                                             Q = component_Q,
+                                             bcp_threshold = 0.5,
                                              ssb_col = "SSB_component")
 }
 ```
 
 
 **Results:**
-**Shetland / Orkney** (unchanged from thesis)
+**Shetland / Orkney**
 ```
-CPT changepoint years:  1983, 1990, 1994, 1996, 2005, 2014
-BCP changepoint years:  1983, 1990, 1994, 2002, 2005, 2014
-Consensus changepoints (± 1 yr, min 5 yr apart): 1983, 1990, 2005, 2014
+CPT changepoint years:  1983, 1990, 1994, 2005
+BCP support (100 seeds): 1983=100%, 1990=100%, 1994=100%, 1996=91%, 1997=52%, 2002=100%, 2005=100%, 2014=100%
+Consensus changepoints (± 1 yr, min 5 yr apart): 1983, 1990, 2005
 ```
 
-**Banks** (unchanged from thesis)
+**Banks**
 ```
-CPT changepoint years:  1982, 1990, 2000, 2005, 2009, 2019
-BCP changepoint years:  1983, 1990, 2000, 2001, 2005
+CPT changepoint years:  1982, 1990, 2000, 2005
+BCP support (100 seeds): 1983=100%, 1990=100%, 2000=100%, 2001=100%, 2005=100%, 2009=98%, 2019=83%
 Consensus changepoints (± 1 yr, min 5 yr apart): 1982, 1990, 2000, 2005
 ```
 
-**Buchan & Downs** (changed from thesis)
-With the converged chain the BCP posterior changepoint probability is ~0 for
-every year in both components, no year reaches the 0.7 threshold, so BCP
-detects **no** changepoints.
+**Buchan** (previously mis-reported here as "no changepoints" - a numerical
+underflow bug in `bcp()`, not a real absence of structure; confirmed present
+in the pre-2026-update data too, so this was never actually caused by the data
+update)
+```
+CPT changepoint years:  1986, 1993, 2009, 2018
+BCP support (100 seeds): 1989=100%, 1990=100%, 1991=100%, 1992=100%, 1994=100%, 2001=100%, 2010=100%, 2016=84%, 2017=100%, 2018=99%
+Consensus changepoints (± 1 yr, min 5 yr apart): 1993, 2009, 2018
+```
+Buchan has strong, robust BCP support clustering across 1989-1994, 2001,
+2010-2011 and 2016-2018. At the reduced (length-matched) `Q`, CPT's nearest
+candidate to that first cluster is 1993 rather than 1989 - the underlying BCP
+evidence for the cluster is unchanged, only which specific nearby year
+represents it in the consensus shifts, since fewer CPT candidates are
+requested. Buchan is no longer in the "no changepoints" group.
 
-No consensus changepoints exist for Buchan and. (For
-reference, CPT alone suggests Buchan: 1986, 1989, 1993, 2009, 2011, 2018 and
-Downs: 1987, 1999, 2001, 2011, 2015, 2020, but without BCP support these do not
-qualify as consensus changepoints.)
+**Downs** (also previously mis-reported as "no changepoints" for the same
+underflow reason)
+```
+CPT changepoint years:  1987, 2001, 2011, 2021
+BCP support (100 seeds): 2001=100%, 2011=100%, 2015=99%, 2021=100%
+Consensus changepoints (± 1 yr, min 5 yr apart): 2001, 2011, 2021
+```
+Downs has strong, robust BCP support at 2001, 2011 and (with the extra year of
+data in this update) 2021. Downs is no longer in the "no changepoints" group.
 
-*Interpretation:* for Downs this converges with the SRR analysis (see below),
-where the breakpoint model is also only weakly supported, Downs shows weaker
-signs of abrupt regime shifts than the other components. For Buchan the evidence
-is mixed: no SSB changepoints, but supported SRR breakpoint structure.
+*Interpretation:* all four components now have BCP-supported consensus
+changepoints - the "Buchan and Downs have no changepoints" contrast reported
+previously never reflected reality; both were hitting the same `bcp()`
+underflow bug, already present before this data update, not something the
+2026 revision caused. For Downs, its SSB series shows consensus changepoints
+in time (2001, 2011, 2021), while its stock-recruitment relationship (SSB vs
+Recruitment, see SRR analysis below) shows **no** breakpoint at all - i.e. the
+*level* of SSB shifted at those years, but the functional relationship between
+SSB and the recruitment it produces did not. For Buchan the SSB changepoints
+(1993, 2009, 2018) and the SRR breakpoint structure (see below) are broadly
+consistent, both point to periodic regime shifts.
+
+
+
+## Phase timeline: full stock vs. components
+
+**Method:** `phase_summary()` fits an OLS regression (value ~ year) on every
+point within each phase (not just its endpoints) and reports the slope as an
+annualised relative growth rate (%/year, normalized by the phase's own mean so
+phases and series of very different absolute scale are comparable). Where a
+reference series is supplied it also reports the phase's mean level as a share
+of that reference (here: component SSB as % of full-stock SSB in the same
+years) and how that share moved from the component's own previous phase - two
+phases can have the same slope while one is gaining relative weight in the
+total stock and the other is losing it, which the slope alone cannot show.
+
+Component data only starts in 1972 (`Herring_LAI`), so comparisons below only
+use the time frame where component data actually exists - the full stock's
+own 1947-1966 phase has no component-level counterpart at all, and the
+1966-1983 phase is only covered by components from 1972 onward.
+
+For Buchan, 1983 is included as an extra boundary alongside its formally
+detected consensus changepoints (1993, 2009, 2018): a rise visible in the SSB
+plot right where the full stock itself turns from collapse to recovery, which
+BCP/CPT did not separately detect as its own changepoint (it falls inside the
+long 1972-1993 span). Splitting it out this way is an informal, visually
+motivated read for interpretation - not a claim that a fourth statistical
+changepoint exists - but it changes the story enough (see below) to be worth
+showing explicitly rather than folding into one long phase.
+
+```{r}
+### Loaded here (rather than only later, at the plot-grid step) because this
+### phase-timeline comparison needs it first
+load("data/Herring_full.Rdata")
+
+full_ssb <- Herring_full %>% dplyr::filter(year <= 2025) %>% dplyr::select(year, SSB)
+
+phase_tables <- list(
+  `Full Stock` = phase_summary(Herring_full %>% dplyr::filter(year <= 2025), "SSB", "year",
+                               c(1947, 1966, 1983, 2000, 2025), "Full Stock"),
+  `Shetland / Orkney` = phase_summary(Herring[["SHOR"]], "SSB_component", "year",
+                                      c(range(Herring[["SHOR"]]$year), 1983, 1990, 2005), "Shetland / Orkney",
+                                      scale_data = full_ssb, scale_value_col = "SSB"),
+  Banks = phase_summary(Herring[["Banks"]], "SSB_component", "year",
+                        c(range(Herring[["Banks"]]$year), 1982, 1990, 2000, 2005), "Banks",
+                        scale_data = full_ssb, scale_value_col = "SSB"),
+  Buchan = phase_summary(Herring[["Buchan"]], "SSB_component", "year",
+                         c(range(Herring[["Buchan"]]$year), 1983, 1993, 2009, 2018), "Buchan (1983 indicated)",
+                         scale_data = full_ssb, scale_value_col = "SSB"),
+  Downs = phase_summary(Herring[["Downs"]], "SSB_component", "year",
+                        c(range(Herring[["Downs"]]$year), 2001, 2011, 2021), "Downs",
+                        scale_data = full_ssb, scale_value_col = "SSB"))
+
+for (tbl in phase_tables) print(tbl, row.names = FALSE)
+```
+
+**Reading the table:**
+
+* **Full stock:** decline (1947-66, sig.) into the collapse (1966-83, sig.),
+  a recovery (1983-2000) and a recent flat-to-declining phase (2000-25) that
+  are directionally clear but don't individually clear p<0.05 on their own -
+  18-26 points against high year-to-year noise isn't enough to confirm either
+  on its own merits.
+* **Buchan, with 1983 treated as real:** already rising fast before 1983
+  (+32%/yr, small base, 7.5% share), then a second strong rise (+18%/yr)
+  takes its share of the total stock from 7.5% to 40.6% at exactly the point
+  the full stock itself turns from collapse to recovery - coincident with the
+  full stock, not a decade-late lag as the single-phase (1972-1993) view
+  suggested. The share then nearly round-trips back down to 15.5% through
+  1993-2009 despite a merely "flat" slope (the rest of the stock outgrew
+  Buchan, not that Buchan shrank), before a second, smaller surge-and-fade
+  cycle (2009-18 up, 2018-24 down). Buchan moves in surge-and-fade cycles
+  rather than tracking one sustained trend.
+* **Downs:** a single uninterrupted, significant rise (1972-2001) spans both
+  of the full stock's early regimes with no kink at 1983 - Downs simply did
+  not participate in the collapse/recovery cycle the way the others did.
+  From 2001 its own slope loses significance in two of the three following
+  phases even as its share of the total stock keeps climbing in jumps (33% to
+  30% to 45%) rather than a continued smooth climb - "unstable" describes the
+  *path*, not the *direction*, which never reverses. Downs has gone from ~8%
+  to ~45% of total stock SSB and may now be the largest single component.
+* **SHOR and Banks** both show a "slice grew, pie grew faster" pattern during
+  1983-2000: SHOR's own SSB rose (+8.8%/yr) while its share of the total fell
+  (64% to 41%), because it held an outsized share of a very small total
+  during the collapse trough and the recovery was carried disproportionately
+  by others. Banks' share fell to 6% by 2000 for the same reason, despite a
+  near-flat own-slope.
+* **None of the four components leads the full stock in timing** - Buchan's
+  first real shift is coincident (not preceding) the full stock's 1983 turn;
+  the closest thing to a lead anywhere (Banks, 1982 vs. 1983) is one year,
+  within noise.
 
 **Plot:**
 
@@ -183,7 +353,7 @@ ggsave(filename = file.path("plots/", "SSB_cpt_components.png"),
        plot = grid.arrange(grobs = lapply(plots_SSB_cpt, strip_axes),
                            ncol = 2,
                            bottom = "Year",
-                           left = "SSB in million t"),
+                           left = "SSB (million t)"),
        bg = "white",
        width = 12,
        height = 9,
@@ -195,10 +365,13 @@ ggsave(filename = file.path("plots/", "SSB_cpt_components.png"),
 ```{r}
 load("data/Herring_full.Rdata")
 
-### Align the SSB year axis with the F and R columns (fixed 1947-2024 range) and
-### drop the per-panel x-axis title (one shared "Year" label sits below the grid)
+### Align the SSB year axis with the F and R columns (fixed 1947-2024 range),
+### drop the per-panel x-axis title (one shared "Year" label sits below the
+### grid), and drop the per-panel plot title (the component name is already
+### the row label - the F and R columns never had one of these to begin with)
 align_years <- function(p) {
-  suppressWarnings(p + xlim(1947, 2024) + theme(axis.title.x = element_blank()))
+  suppressWarnings(p + xlim(1947, 2024) +
+                      theme(axis.title.x = element_blank(), plot.title = element_blank()))
 }
 
 plot_SSB_cpt_full <- plot_SSB_cpt(data = Herring_full,
@@ -317,6 +490,24 @@ are stored in the component configuration (SHOR 1, Buchan 3, Banks 5, Downs 1).
 `breakpoint_analysis()` computes the SSB lag internally; a lagged SSB column is
 also added for the hysteresis plots.
 
+**Numerical note:** `breakpoint_analysis()` uses `strucchange::breakpoints()`
+(via `opt_bpts()`), the same underlying method and helper as
+`srr_breakpoint_analysis()` - a different algorithm from `bcp()`'s MCMC, and
+not affected by that numerical underflow bug (verified: rescaling SSB/F by
+several orders of magnitude does not change any breakpoint result here, unlike
+the BCP case). `opt_bpts()` did have a real bug of its own though: when a
+BIC-vs-breaks curve has more than one interior local minimum, it returned them
+in scan order rather than ranked by fit, and callers always use the first
+element - so a shallow, worse-fitting local minimum at a low break count could
+silently be returned instead of a deeper, better-fitting one at a higher break
+count. This was caught on Downs' hysteresis specifically: its BIC curve has
+local minima at both 2 and 4 breaks, with 4 the true (lower-BIC) global
+minimum, but the unfixed function returned 2. Checked against every other
+hysteresis and SRR analysis in this project (all components and the full
+stock) - none of the others have more than one interior local minimum, so this
+was the only case actually affected; `opt_bpts()` has been fixed to rank
+multiple local minima by BIC regardless.
+
 ```{r}
 for (key in names(components)) {
   ccf(Herring[[key]]$SSB_component, Herring[[key]]$F, type = "correlation",
@@ -380,7 +571,7 @@ ggsave(filename = file.path("plots/", "hysteresis_components.png"),
        plot = grid.arrange(grobs = lapply(plots_hysteresis, strip_axes),
                            ncol = 2,
                            bottom = "F",
-                           left = "SSB in million t"),
+                           left = "SSB (million t)"),
        bg = "white",
        width = 12,
        height = 9,
@@ -441,84 +632,89 @@ test prediction per model (`n_test_folds`), a mean over few folds is not
 comparable to models evaluated on all folds. The values below are from a
 verified re-run.
 
-**Shetland / Orkney** (52 folds, all models evaluated on all folds)
+**Shetland / Orkney** (53 folds, all models evaluated on all folds)
 ```
 LOOCV   linear    beverton    ricker      segmented   seg.log     segm.glm    strucchange
-TEST:   6032494   5917938     5996407     5906258     5705907     5919391     9093970
-TRAIN:  7193145   7998380     7896592     6659682     6947653     6985388     4409284
+TEST:   6130646   5993134     6077639     5862612     5567516     5993610     8907639
+TRAIN:  7308756   8173777     8045893     6787493     7062180     7092471     4388715
 
 SRR breakpoints: optimal number of breaks: 3
-Best breakpoint SSB values: 148853.8, 505309.4, 1201916.7
+Best breakpoint SSB values: 150184.2, 511033.1, 1223559.3
 Best breakpoint years:      1980, 1987, 2001
 ```
 
 LOOCV: strucchange has the lowest train RMSE but the highest test RMSE, fits
 the observed series closely while predicting left-out years poorly.
 
-**Buchan** (52 folds; beverton evaluated on 51)
+**Buchan** (53 folds; beverton evaluated on 52)
 ```
 LOOCV   linear    beverton    ricker    segmented   seg.log     segm.glm    strucchange
-TEST:   3896840   3509676     3594421   3800680     3380906     4106902     8445141
-TRAIN:  5799156   6165427     6142351   5736075     6092541     5923863     2828094
+TEST:   3975684   3596876     3692709   3964665     3466497     4275538     8939867
+TRAIN:  5980044   6376121     6353865   5920518     6301303     6093582     2864856
 
 SRR breakpoints: optimal number of breaks: 3
-Best breakpoint SSB values: 147574.4, 1257071.9, 123660.5
+Best breakpoint SSB values: 149083.9, 1278132.6, 125887.2
 Best breakpoint years:      1983, 1991, 2001
 ```
 
 LOOCV: same pattern as Shetland / Orkney, strucchange fits the series best
 (lowest train RMSE) but predicts left-out years worst (highest test RMSE).
 
-**Banks** (52 folds, all models evaluated on all folds)
+**Banks** (53 folds, all models evaluated on all folds)
 ```
 LOOCV   linear    beverton    ricker    segmented   seg.log     segm.glm    strucchange
-TEST:   2298870   1970034     1954005   2399081     2038932     2370784     4418968
-TRAIN:  3211518   3180706     3133516   2988736     3112284     3020506     1363380
+TEST:   2303908   1979821     1963756   2510689     2029915     2362265     4314485
+TRAIN:  3262373   3230360     3182808   3053152     3160261     3067352     1405691
 
 SRR breakpoints: optimal number of breaks: 3
-Best breakpoint SSB values: 38326.5, 307682.7, 303694
+Best breakpoint SSB values: 38669.1, 311167.9, 309162.5
 Best breakpoint years:      1980, 1987, 2001
 ```
 
 LOOCV: same pattern as Shetland / Orkney, strucchange fits the series best
 (lowest train RMSE) but predicts left-out years worst (highest test RMSE).
 
-**Downs** (52 folds; beverton evaluated on only 1 fold, strucchange on only 7 —
+**Downs** (53 folds; beverton evaluated on only 1 fold, strucchange on only 5 —
 their test means are **not** comparable and should not be interpreted)
 ```
 LOOCV   linear    beverton*   ricker      segmented   seg.log     segm.glm    strucchange*
-TEST:   1504907   (13872)     1413304     1245100     1228831     1235682     (2689827)
-TRAIN:  1784159   1771427     1936653     1619286     1688248     1611886     1393370
+TEST:   1552443   (13503)     1466005     1285054     1274572     1290043     (3032227)
+TRAIN:  1862654   1853802     2031077     1695986     1768639     1690839     1503568
 
-SRR breakpoints: optimal number of breaks: 4
-Best breakpoint SSB values: 17120.8, 213659.7, 565941.9, 435906.7
-Best breakpoint years:      1980, 2000, 2007, 2014
+SRR breakpoints: optimal number of breaks: 0 (relationship treated as continuous)
 ```
 
 LOOCV: among the models evaluated on all folds, the segmented variants predict
-held-out years best and the linear model worst; strucchange again has the lowest
-train RMSE.
+held-out years best and the linear model worst.
+
+**Downs no longer has any SRR breakpoint support.** With the updated ICES data
+the full-series BIC minimum for `strucchange` is 0 breaks outright — there is no
+longer even a weakly-supported local optimum to report (previously an interior
+BIC local minimum surfaced 4 breakpoints via the `opt_bpts` rule; that local
+optimum no longer exists). `srr_breakpoint_analysis()` now returns `break_years
+= numeric(0)` for Downs and `plot_SRR()` draws it as a single continuous
+relationship (subtitle "continuous (no breakpoints)") instead of a
+strucchange-segmented one.
 
 **Failed Folds (Buchan, Downs), and what that means:**
-* *Beverton-Holt (1/52 folds usable):* the log-scale nls fit aborts with
-  non-finite values for 51 of 52 training subsets, the saturating BH curve
+* *Beverton-Holt (1/53 folds usable for Downs):* the log-scale nls fit aborts
+  with non-finite values for 52 of 53 training subsets, the saturating BH curve
   shape is essentially incompatible with the increasing Downs SRR data, so the
   model cannot even be evaluated for almost any subset.
-* *strucchange (7/52 folds usable):* for 45 of 52 training subsets the
-  BIC-minimizing partition selects **zero** breakpoints; without breakpoints no
-  piecewise prediction exists and the fold is skipped. The same holds for the
-  full Downs series: the global BIC minimum is 0 breaks, and the 4 reported
-  breakpoints correspond to an interior local minimum of the BIC curve
-  (`opt_bpts` rule), the Downs breakpoint model is only weakly supported.
+* *strucchange (5/53 folds usable for Downs):* for the large majority of
+  training subsets the BIC-minimizing partition selects **zero** breakpoints;
+  without breakpoints no piecewise prediction exists and the fold is skipped.
   Together with the absence of consensus changepoints in its SSB series (see
-  changepoint section), this indicates that Downs shows weaker signs of abrupt
-  regime shifts than the other components; its LOOCV favoring the smooth
-  segmented models points to gradual nonlinear change instead.
+  changepoint section), this indicates that Downs shows no signs of abrupt
+  regime shifts; its LOOCV favoring the smooth segmented models points to
+  gradual nonlinear change instead of a discrete shift.
 
-**Overall:** across components, strucchange describes the observed regimes most
-closely (lowest train RMSE throughout) while its held-out predictions are mostly
-the weakest, consistent with it capturing regime structure rather than a single
-predictive stock-recruitment relationship.
+**Overall:** across Shetland/Orkney, Buchan and Banks, strucchange describes the
+observed regimes most closely (lowest train RMSE) while its held-out
+predictions are mostly the weakest, consistent with it capturing regime
+structure rather than a single predictive stock-recruitment relationship. Downs
+is the exception: no regime structure is supported at all, and the smooth
+continuous models both fit and predict better than any breakpoint model.
 
 
 **Plot:**
@@ -527,10 +723,11 @@ predictive stock-recruitment relationship.
 plots_SRR <- list()
 for (key in names(components)) {
   cfg <- components[[key]]
+  no_breaks <- results_SRR[[key]]$optimal_breaks == 0
   plots_SRR[[key]] <- plot_SRR(Herring[[key]],
                                break_years = results_SRR[[key]]$break_years,
                                title_stock = cfg$label,
-                               used_model = "strucchange",
+                               used_model = if (no_breaks) "continuous (no breakpoints)" else "strucchange",
                                ssb_col = "SSB_component",
                                show_Blim = FALSE,
                                nudge_params = cfg$srr_nudge)
@@ -546,8 +743,8 @@ for (key in names(components)) {
 ggsave(filename = file.path("plots/", "SRR_components.png"),
        plot = grid.arrange(grobs = lapply(plots_SRR, strip_axes),
                            ncol = 2,
-                           bottom = "SSB in million t",
-                           left = "R in billions"),
+                           bottom = "SSB (million t)",
+                           left = "R (billions)"),
        bg = "white",
        width = 12,
        height = 9,

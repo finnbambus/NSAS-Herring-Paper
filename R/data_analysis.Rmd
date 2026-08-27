@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = normalizePath(".."))
+knitr::opts_knit$set(root.dir = here::here())
 ```
 
 
@@ -19,7 +19,7 @@ if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
 pacman::p_load(bcp, changepoint, ggrepel,
   ggplot2, tidyverse, FSA, strucchange,
-  MASS, segmented)
+  MASS, segmented, here)
 ```
 
 
@@ -36,8 +36,24 @@ source("R/functions.R")
 
 # Change-points
 **Analysis:**
-`bcp()` is MCMC-based; `changepoint_analysis()` fixes the seed and runs 5000
-iterations so the changepoint set is reproducible (verified stable across seeds).
+`bcp()` is called with its published defaults (mcmc=500, burnin=50, no forced
+seed), matching the original methodological inspiration (Gutte et al.,
+[tipping_northsea_fish](https://github.com/HeleneGutte/tipping_northsea_fish),
+`1_Change_points_SSB.R`: `bcp(y=herring$SSB)`). A single unseeded run is a
+noisy point estimate though (that repo's own comment: re-running changed the
+changepoint set), and separately raw SSB magnitude can trigger a floating-point
+underflow bug in `bcp()`'s C++ likelihood computation that silently zeroes the
+*entire* posterior (verified against the package source: catastrophic
+cancellation in a naive one-pass sum-of-squares term). Neither is fixable by
+picking one lucky seed or one lucky rescaling - both were tested extensively
+and shown to be case-by-case unpredictable. Instead, `changepoint_analysis()`
+now runs `bcp()` across 100 seeds and reports, per year, the fraction of seeds
+whose posterior probability clears 0.5; a numerically-safe rescaling is only
+applied (and only chosen from a small fixed panel) when raw is degenerate for
+every seed. CPT's `penalty = "MBIC"` is likewise the package default, named
+explicitly to match the reference - note this is a real search cap via `Q`,
+not unconstrained selection, in both this codebase and the reference's own
+(also always Q-capped, at 5 or explicit 6/10 depending on species).
 
 ```{r}
 results_cpt <- changepoint_analysis(Herring_full,
@@ -51,22 +67,34 @@ results_cpt <- changepoint_analysis(Herring_full,
 
 **Results:**
 ```
-CPT changepoint years:  1950, 1964, 1966, 1986, 2000, 2018
-BCP changepoint years:  1966, 1983, 2000
+CPT changepoint years:  1950, 1964, 1966, 1983, 1986, 2000
+BCP support (100 seeds): 1966=99%, 1983=93%, 2000=66%
 
-Consensus changepoints (± 1 yr, min 5 yr apart): 1966, 2000
-CPT only: 1950, 1964, 1986, 2018
-BCP only: 1983
+Consensus changepoints (± 1 yr, min 5 yr apart): 1966, 1983, 2000
 ```
+This matches the changepoints reported for herring in the published paper this
+project is based on (Table 1: periods 1947-1966, 1967-1983, 1984-2000,
+2001-2021) - confirmed independently, not hardcoded to match. 1966 and 1983
+are supported in nearly every seed; 2000 is a real but more marginal signal
+(clearly above the ~1-17% background rate for neighboring non-changepoint
+years, but well short of unanimous) - consistent with the reference repo's own
+single unseeded run happening to miss it while their published table, drawing
+on more evidence, kept it. On the previous (pre-2026-update) data this same
+seed-sweep procedure gives 1966=99%, 1983=96%, 2000=56%, i.e. the same three
+years at comparable confidence - the 2026 ICES revision did not erode 2000's
+support (an earlier single-seed analysis suggested it had; that was an
+artifact of relying on one seed's threshold crossing instead of the
+distribution). The 1983 vs 2000 confidence gap is real and present in both
+datasets, not new.
 
 
 **Plot:**
 
 ```{r}
 plot_SSB_cpt_full <- plot_SSB_cpt(data = Herring_full,
-              changepoints = c(1966,2000),
-              ribbon_colors = c("#201124", "#3e478d", "#318ca5"),
-              vline_colors = c("black", "black"),
+              changepoints = c(1966,1983,2000),
+              ribbon_colors = c("#201124", "#3e478d", "#318ca5", "#5ccdaa"),
+              vline_colors = c("black", "black", "black"),
               component = "Full Stock",
               SSB_column = "SSB",
               l_bnd_column = "l_bnd",

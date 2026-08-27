@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = normalizePath(".."))
+knitr::opts_knit$set(root.dir = here::here())
 ```
 
 
@@ -17,7 +17,7 @@ knitr::opts_knit$set(root.dir = normalizePath(".."))
 # installs packages if not already installed
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-pacman::p_load(tidyverse)
+pacman::p_load(tidyverse, here)
 ```
 
 
@@ -54,31 +54,16 @@ LAI_component <- read_csv("data raw/NSAS LAI Components 2025.csv") %>%
          year = as.numeric(year),
          LAI_perc. = LAI_perc. * 100)
 
-## Read SSB_2025 .csv & and rename columns for continuity
-Herring_full <- read_csv("data raw/NSAS SSB 2025.csv") %>%
-  dplyr::select(-1) %>%
-  rename(SSB = value, cv = CV, l_bnd = lbnd, u_bnd = ubnd)
+## Read ICES 2026 .txt data (SSB & assessment combined) & rename columns for continuity
+Herring_full <- read.csv("data raw/NSAS ICES data 2026.txt") %>%
+  rename(l_bnd = SSB_low, u_bnd = SSB_high,
+         Recruitment_high = recruitment_high,
+         Recruitment_low = recruitment_low)
 ```
 
 
-Variables: SSB = SSB in Tonnes, cv = coefficient of variation, l_bnd = lower
-limit of 95% CI & u_bnd = upper limit of 95% CI.
-
-
-**SSB & ICES Assessment Data:**
-
-The ICES assessment data (F & R) is joined to `Herring_full` by year (the SSB
-series runs 1947-2025, the ICES assessment 1947-2024; unmatched years get NA).
-
-```{r}
-ICES_data <- read.csv("data raw/NSAS ICES data 2024.txt") %>%
-  dplyr::select(year, F, F_high, F_low, Recruitment,
-                Recruitment_high = recruitment_high,
-                Recruitment_low = recruitment_low)
-
-Herring_full <- Herring_full %>%
-  left_join(ICES_data, by = "year")
-```
+Variables: SSB = SSB in Tonnes, l_bnd = lower limit of 95% CI, u_bnd = upper
+limit of 95% CI, F = fishing mortality, Recruitment = recruitment in numbers.
 
 
 
@@ -165,7 +150,7 @@ plot_SSB_component <- ggplot(Herring_LAI, aes(x = year, y = SSB_component / 1e6,
   scale_fill_viridis_d(option = "mako", begin = 0.1, end = 0.8) +
   labs(title = NULL,
        x = "Year",
-       y = "SSB in million t") +
+       y = "SSB (million t)") +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_text(margin = margin(t = 10)),
@@ -179,7 +164,7 @@ plot_R_component <- ggplot(Herring_LAI, aes(x = year, y = Recruitment / 1e6, col
   scale_fill_viridis_d(option = "mako", begin = 0.1, end = 0.8) +
   labs(title = NULL,
        x = "Year",
-       y = "R in billions") +
+       y = "R (billions)") +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5),
         axis.title.x = element_text(margin = margin(t = 10)),
