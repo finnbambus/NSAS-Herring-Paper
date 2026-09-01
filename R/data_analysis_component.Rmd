@@ -175,7 +175,8 @@ for (key in names(components)) {
                                              year_col = "year",
                                              Q = component_Q,
                                              bcp_threshold = 0.5,
-                                             ssb_col = "SSB_component")
+                                             ssb_col = "SSB_component",
+                                             plot_results = FALSE)
 }
 ```
 
@@ -340,7 +341,6 @@ for (key in names(components)) {
                 l_bnd_column = "l_bnd_component",
                 u_bnd_column = "u_bnd_component",
                 show_hlines = FALSE)
-  print(plots_SSB_cpt[[key]])
 }
 ```
 
@@ -485,8 +485,8 @@ ggsave(filename = file.path("plots/", "cpt_grid.png"),
 
 # Hysteresis
 **Analysis:**
-The SSB-F cross-correlation is examined per component; the resulting lag choices
-are stored in the component configuration (SHOR 1, Buchan 3, Banks 5, Downs 1).
+The SSB-F cross-correlation lag per component (SHOR 1, Buchan 3, Banks 5,
+Downs 1) is stored in the component configuration above.
 `breakpoint_analysis()` computes the SSB lag internally; a lagged SSB column is
 also added for the hysteresis plots.
 
@@ -509,11 +509,6 @@ was the only case actually affected; `opt_bpts()` has been fixed to rank
 multiple local minima by BIC regardless.
 
 ```{r}
-for (key in names(components)) {
-  ccf(Herring[[key]]$SSB_component, Herring[[key]]$F, type = "correlation",
-      main = paste("SSB x F -", components[[key]]$label))
-}
-
 results_brkpt <- list()
 for (key in names(components)) {
   cfg <- components[[key]]
@@ -558,7 +553,6 @@ for (key in names(components)) {
                                              results_brkpt[[key]]$break_years,
                                              components[[key]]$label,
                                              show_msy_btrigger = FALSE)
-  print(plots_hysteresis[[key]])
 }
 ```
 
@@ -731,7 +725,6 @@ for (key in names(components)) {
                                ssb_col = "SSB_component",
                                show_Blim = FALSE,
                                nudge_params = cfg$srr_nudge)
-  print(plots_SRR[[key]])
 }
 ```
 

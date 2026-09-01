@@ -61,7 +61,8 @@ results_cpt <- changepoint_analysis(Herring_full,
                                           year_col = "year",
                                           Q = 6,
                                           bcp_threshold = 0.5,
-                                          ssb_col = "SSB")
+                                          ssb_col = "SSB",
+                                          plot_results = FALSE)
 ```
 
 
